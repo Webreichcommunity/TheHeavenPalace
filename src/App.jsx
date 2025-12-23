@@ -148,7 +148,7 @@ function App() {
 
           <div className="w-full flex bg-gray-200 p-2 rounded-2xl items-center gap-2  mt-6  justify-between">
             <img src="https://webreichtech.vercel.app/logo.png" alt="" className='w-6 h-6' />
-            <h3 className=' text-gray-800 text-sm font-thin'>WebReich Solutions</h3>
+            <h3 className=' text-gray-800 text-sm font-thin'>WebReich Solution</h3>
           </div>
         </main>
 
