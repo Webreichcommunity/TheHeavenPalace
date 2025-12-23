@@ -88,9 +88,9 @@ function App() {
   return (
     <Router>
       <div className="flex h-screen">
-        <Navbar 
-          activeTab={activeTab} 
-          setActiveTab={setActiveTab} 
+        <Navbar
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
           user={user}
           userRole={userRole}
           onLogout={handleLogout}
@@ -98,54 +98,61 @@ function App() {
         <main className="flex-1 overflow-auto p-4 bg-gray-50">
           <Routes>
             <Route path="/login" element={<Navigate to="/" replace />} />
-            
+
             {/* Admin Routes */}
             <Route path="/" element={
               <ProtectedRoute user={user} allowedRoles={['admin']}>
                 <Navigate to="/dashboard" replace />
               </ProtectedRoute>
             } />
-            
+
             <Route path="/dashboard" element={
               <ProtectedRoute user={user} allowedRoles={['admin']}>
                 <Dashboard tables={tables} onTableSelect={setSelectedTable} />
               </ProtectedRoute>
             } />
-            
+
             <Route path="/billing" element={
               <ProtectedRoute user={user} allowedRoles={['admin']}>
                 <Billing tables={tables} orders={orders} selectedTable={selectedTable} />
               </ProtectedRoute>
             } />
 
-             <Route path="/reports" element={
+            <Route path="/reports" element={
               <ProtectedRoute user={user} allowedRoles={['admin']}>
                 <Reports />
               </ProtectedRoute>
             } />
-            
+
             <Route path="/addmenu" element={
               <ProtectedRoute user={user} allowedRoles={['admin']}>
                 <Addmenu />
               </ProtectedRoute>
             } />
-            
+
             {/* Staff Routes (accessible by both admin and staff) */}
             <Route path="/kitchen" element={
               <ProtectedRoute user={user} allowedRoles={['admin', 'staff']}>
                 <Kitchen orders={orders} />
               </ProtectedRoute>
             } />
-            
+
             <Route path="/captain" element={
               <ProtectedRoute user={user} allowedRoles={['admin', 'staff']}>
                 <Captain onTableSelect={setSelectedTable} />
               </ProtectedRoute>
             } />
-            
+
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
+
+          <div className="w-full flex bg-gray-200 p-2 rounded-2xl items-center gap-2  mt-6  justify-between">
+            <img src="https://webreichtech.vercel.app/logo.png" alt="" className='w-6 h-6' />
+            <h3 className=' text-gray-800 text-sm font-thin'>WebReich Solutions</h3>
+          </div>
         </main>
+
+
       </div>
     </Router>
   )
