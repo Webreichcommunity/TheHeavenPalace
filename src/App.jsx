@@ -14,6 +14,7 @@ import Login from './Components/Login'
 import ProtectedRoute from './Components/ProtectedRoute'
 import './App.css'
 import Reports from './Components/Reports'
+import ParcelPage from './Components/Parcel'
 
 function App() {
   const [activeTab, setActiveTab] = useState('dashboard')
@@ -140,6 +141,12 @@ function App() {
             <Route path="/captain" element={
               <ProtectedRoute user={user} allowedRoles={['admin', 'staff']}>
                 <Captain onTableSelect={setSelectedTable} />
+              </ProtectedRoute>
+            } />
+
+              <Route path="/parcel" element={
+              <ProtectedRoute user={user} allowedRoles={['admin', 'staff']}>
+                <ParcelPage onTableSelect={setSelectedTable} />
               </ProtectedRoute>
             } />
 

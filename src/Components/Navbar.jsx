@@ -15,7 +15,8 @@ import {
   Settings,
   LogOut,
   HelpCircle,
-  BarChart4
+  BarChart4,
+  Package
 } from 'lucide-react'
 import { auth } from '../Firebase/config'
 import { signOut, onAuthStateChanged } from 'firebase/auth'
@@ -110,6 +111,7 @@ export default function Navbar({ setActiveTab }) {
       { id: 'billing', label: 'Billing', icon: CreditCard, path: '/billing', roles: ['admin'] },
       { id: 'reports', label: 'Reports', icon: BarChart4, path: '/reports', roles: ['admin'] },
       { id: 'addmenu', label: 'Add Menu', icon: PlusCircle, path: '/addmenu', roles: ['admin'], featured: true },
+      { id: 'parcel', label: 'Parcel', icon: Package, path: '/parcel', roles: ['admin', 'staff'], featured: true },
     ]
 
     return baseItems.filter(item => !userRole || item.roles.includes(userRole))

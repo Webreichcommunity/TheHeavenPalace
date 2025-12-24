@@ -1,18 +1,18 @@
 import React, { useState, useEffect, useCallback } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { ref, push, update, onValue, off, remove, query, orderByChild } from 'firebase/database'
 import { database } from '../Firebase/config'
-import { 
-  ShoppingCart, 
-  Plus, 
-  Minus, 
-  Trash2, 
-  Send, 
-  CheckCircle, 
-  ArrowLeft, 
-  Search, 
-  Clock, 
-  X, 
+import {
+  ShoppingCart,
+  Plus,
+  Minus,
+  Trash2,
+  Send,
+  CheckCircle,
+  ArrowLeft,
+  Search,
+  Clock,
+  X,
   Users,
   Table,
   ChevronRight,
@@ -68,9 +68,9 @@ const Captain = () => {
 
   // Updated floor configuration
   const floorConfig = [
-    { 
-      id: '1', 
-      label: 'Ground Floor', 
+    {
+      id: '1',
+      label: 'Ground Floor',
       color: 'text-emerald-600',
       tables: [
         { number: '1', displayName: 'T1' },
@@ -82,15 +82,15 @@ const Captain = () => {
         { number: '6B', displayName: 'T6B' }
       ]
     },
-    { 
-      id: '2', 
-      label: 'First Floor', 
+    {
+      id: '2',
+      label: 'First Floor',
       color: 'text-amber-600',
       tables: []
     },
-    { 
-      id: '3', 
-      label: 'Top Floor', 
+    {
+      id: '3',
+      label: 'Top Floor',
       color: 'text-blue-600',
       tables: [
         { number: 'T1', displayName: 'TT1' },
@@ -122,7 +122,7 @@ const Captain = () => {
   // Fetch menu items
   useEffect(() => {
     const menuRef = query(ref(database, 'menuItems'), orderByChild('category'))
-    
+
     const unsubscribe = onValue(menuRef, (snapshot) => {
       try {
         const data = snapshot.val()
@@ -151,7 +151,7 @@ const Captain = () => {
   // Fetch tables, orders, notifications
   useEffect(() => {
     setIsInitializing(true)
-    
+
     const tablesRef = ref(database, 'tables')
     const ordersRef = query(ref(database, 'orders'), orderByChild('status'))
     const notificationsRef = query(ref(database, 'notifications'), orderByChild('read'))
@@ -182,7 +182,7 @@ const Captain = () => {
           const notificationsArray = Object.entries(data).map(([id, notification]) => ({
             id,
             ...notification
-          })).filter(notification => 
+          })).filter(notification =>
             notification.type === 'kitchen_complete' && !notification.read
           )
           setKitchenNotifications(notificationsArray)
@@ -217,23 +217,23 @@ const Captain = () => {
       return { totalTables: 0, occupiedTables: 0, activeOrdersCount: 0, totalRevenue: 0 }
     }
 
-    const floorTableIds = floorTables.map(table => 
+    const floorTableIds = floorTables.map(table =>
       getTableId(table.number, floorTables[0]?.floorId || '1')
     )
-    
-    const occupiedTables = floorTableIds.filter(tableId => 
+
+    const occupiedTables = floorTableIds.filter(tableId =>
       tables[tableId]?.status === 'occupied'
     ).length
-    
+
     const activeOrdersCount = floorTableIds.reduce((count, tableId) => {
-      const tableOrders = Object.values(activeOrders).filter(order => 
+      const tableOrders = Object.values(activeOrders).filter(order =>
         order.tableId === tableId && order.status === 'active'
       )
       return count + tableOrders.length
     }, 0)
-    
+
     const totalRevenue = floorTableIds.reduce((sum, tableId) => {
-      const tableOrders = Object.values(activeOrders).filter(order => 
+      const tableOrders = Object.values(activeOrders).filter(order =>
         order.tableId === tableId && order.status === 'active'
       )
       return sum + tableOrders.reduce((orderSum, order) => orderSum + (order.total || 0), 0)
@@ -249,7 +249,7 @@ const Captain = () => {
 
   const filteredMenuItems = React.useMemo(() => {
     return Object.keys(menuItems).reduce((acc, category) => {
-      const filtered = menuItems[category].filter(item => 
+      const filtered = menuItems[category].filter(item =>
         item.name.toLowerCase().includes(searchTerm.toLowerCase())
       )
       if (filtered.length > 0) acc[category] = filtered
@@ -279,8 +279,8 @@ const Captain = () => {
 
   const handleTableSelect = (tableNumber, floorId) => {
     const tableId = getTableId(tableNumber, floorId)
-    const table = { 
-      id: tableId, 
+    const table = {
+      id: tableId,
       number: tableNumber,
       floor: floorId,
       displayName: floorConfig.find(f => f.id === floorId)?.tables.find(t => t.number === tableNumber)?.displayName || `T${tableNumber}`
@@ -291,8 +291,8 @@ const Captain = () => {
   }
 
   const toggleFloor = (floorId) => {
-    setExpandedFloors(prev => 
-      prev.includes(floorId) 
+    setExpandedFloors(prev =>
+      prev.includes(floorId)
         ? prev.filter(id => id !== floorId)
         : [...prev, floorId]
     )
@@ -342,7 +342,7 @@ const Captain = () => {
       const mainTableId = selectedTablesForJoin[0]
       const tableNumber = getDisplayTableNumber(mainTableId)
       const floorId = mainTableId.includes('table-3-') ? '3' : '1'
-      
+
       handleTableSelect(tableNumber, floorId)
       setShowTableJoinModal(false)
       setSelectedTablesForJoin([])
@@ -371,7 +371,7 @@ const Captain = () => {
       groupTables.forEach(tId => {
         updates[`tables/${tId}/joinedGroup`] = null
         updates[`tables/${tId}/isJoined`] = false
-        
+
         const hasActiveOrders = Object.values(activeOrders).some(
           order => order.tableId === tId && order.status === 'active'
         )
@@ -398,9 +398,9 @@ const Captain = () => {
         i.id === item.id ? { ...i, quantity: i.quantity + 1 } : i
       ))
     } else {
-      setSelectedItems([...selectedItems, { 
-        ...item, 
-        quantity: 1, 
+      setSelectedItems([...selectedItems, {
+        ...item,
+        quantity: 1,
         status: 'pending',
         addedAt: new Date().toISOString()
       }])
@@ -435,7 +435,7 @@ const Captain = () => {
     try {
       const orderRef = ref(database, `orders/${orderId}`)
       const order = activeOrders[orderId]
-      
+
       if (!order) throw new Error('Order not found')
 
       await update(orderRef, {
@@ -447,7 +447,7 @@ const Captain = () => {
       const tableOrders = Object.values(activeOrders).filter(
         o => o.tableId === order.tableId && o.status === 'active'
       )
-      
+
       if (tableOrders.length === 0 && !tables[order.tableId]?.isJoined) {
         const tableRef = ref(database, `tables/${order.tableId}`)
         await update(tableRef, { status: 'available' })
@@ -528,9 +528,9 @@ const Captain = () => {
       setIsOrderPlaced(true)
       setShowOrderSummary(false)
       clearCurrentOrder()
-      
+
       setTimeout(() => setIsOrderPlaced(false), 3000)
-      
+
     } catch (error) {
       console.error('Error placing order:', error)
       setError('Failed to place order')
@@ -595,7 +595,7 @@ const Captain = () => {
 
       if (tables[selectedTable.id]?.isJoined) {
         const joinedGroupId = tables[selectedTable.id].joinedGroup
-        
+
         const groupTables = Object.entries(tables)
           .filter(([_, t]) => t.joinedGroup === joinedGroupId)
           .map(([id]) => id)
@@ -615,14 +615,14 @@ const Captain = () => {
 
       setShowBillSentToast(true)
       setShowCompleteOrderModal(false)
-      
+
       setTimeout(() => {
         setShowBillSentToast(false)
         setCurrentStep('selectTable')
         setSelectedTable(null)
         clearCurrentOrder()
       }, 3000)
-      
+
     } catch (error) {
       console.error('Error completing table order:', error)
       setError(error.message || 'Failed to complete')
@@ -637,7 +637,7 @@ const Captain = () => {
       kitchenNotifications.forEach(notification => {
         updates[`notifications/${notification.id}/read`] = true
       })
-      
+
       if (Object.keys(updates).length > 0) {
         await update(ref(database), updates)
         setKitchenNotifications([])
@@ -653,7 +653,7 @@ const Captain = () => {
   const getJoinedTables = useCallback((tableId) => {
     const table = tables[tableId]
     if (!table?.joinedGroup) return []
-    
+
     return Object.entries(tables)
       .filter(([_, t]) => t.joinedGroup === table.joinedGroup && t.id !== tableId)
       .map(([id, _]) => getDisplayTableNumber(id))
@@ -773,7 +773,7 @@ const Captain = () => {
 
         <div className="p-5">
           <p className="text-gray-600 mb-4">Cancel this order? This cannot be undone.</p>
-          
+
           {orderToCancel?.items && (
             <div className="bg-gray-50 rounded-xl p-3 mb-4">
               <p className="font-medium text-gray-800 mb-2 text-sm">Order Items:</p>
@@ -844,24 +844,23 @@ const Captain = () => {
 
         <div className="p-5">
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-4">
-            {floorConfig.flatMap(floor => 
+            {floorConfig.flatMap(floor =>
               floor.tables.map(table => {
                 const tableId = getTableId(table.number, floor.id)
                 const isSelected = selectedTablesForJoin.includes(tableId)
                 const isOccupied = tables[tableId]?.status === 'occupied'
-                
+
                 return (
                   <button
                     key={tableId}
                     onClick={() => !isOccupied && toggleTableForJoin(table.number, floor.id)}
                     disabled={isOccupied}
-                    className={`p-3 rounded-xl border transition-colors ${
-                      isSelected
+                    className={`p-3 rounded-xl border transition-colors ${isSelected
                         ? 'bg-blue-50 border-blue-500'
                         : isOccupied
-                        ? 'bg-gray-50 border-gray-200 cursor-not-allowed opacity-50'
-                        : 'bg-white border-gray-200 hover:border-blue-300'
-                    }`}
+                          ? 'bg-gray-50 border-gray-200 cursor-not-allowed opacity-50'
+                          : 'bg-white border-gray-200 hover:border-blue-300'
+                      }`}
                   >
                     <div className="flex flex-col items-center gap-1">
                       <div className="flex items-center gap-2">
@@ -925,8 +924,15 @@ const Captain = () => {
       <div className="mb-6">
         <div className="flex items-center justify-between mb-3">
           <div>
-            <h1 className="text-2xl font-semibold text-gray-900">Tables</h1>
-            <p className="text-sm text-gray-500">Select a table to start</p>
+            {/* <h1 className="text-2xl font-semibold text-gray-900">Tables</h1>
+            <p className="text-sm text-gray-500">Select a table to start</p> 
+            */}
+            <Link to="/parcel">
+              <button className='bg-red-600 flex items-center gap-1 text-white px-3 py-2 rounded-lg'>
+                <Package size={16} />
+                Parcel
+              </button>
+            </Link>
           </div>
           <div className="flex items-center gap-2">
             <button
@@ -962,11 +968,10 @@ const Captain = () => {
                   setExpandedFloors([floor.id])
                 }
               }}
-              className={`flex-1 py-2.5 px-3 text-sm font-medium rounded-xl transition-colors ${
-                selectedFloor === floor.id
+              className={`flex-1 py-2.5 px-3 text-sm font-medium rounded-xl transition-colors ${selectedFloor === floor.id
                   ? 'bg-emerald-600 text-white'
                   : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-              }`}
+                }`}
             >
               <div className="flex items-center justify-center gap-2">
                 <Building size={16} className={floor.color} />
@@ -983,9 +988,9 @@ const Captain = () => {
           {floorConfig.map(floor => {
             const stats = getFloorStats(floor.tables)
             const isExpanded = expandedFloors.includes(floor.id)
-            
+
             if (floor.tables.length === 0) return null
-            
+
             return (
               <div key={floor.id} className="bg-white rounded-2xl border border-gray-200">
                 <button
@@ -993,11 +998,10 @@ const Captain = () => {
                   className="w-full p-4 flex items-center justify-between hover:bg-gray-50/50 transition-colors"
                 >
                   <div className="flex items-center gap-3">
-                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
-                      floor.id === '1' ? 'bg-emerald-50' : 
-                      floor.id === '2' ? 'bg-amber-50' : 
-                      'bg-blue-50'
-                    }`}>
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${floor.id === '1' ? 'bg-emerald-50' :
+                        floor.id === '2' ? 'bg-amber-50' :
+                          'bg-blue-50'
+                      }`}>
                       <Building size={20} className={floor.color} />
                     </div>
                     <div className="text-left">
@@ -1033,29 +1037,26 @@ const Captain = () => {
                         const isOccupied = status === 'occupied'
                         const ordersCount = getActiveOrdersCount(tableId)
                         const isJoined = tables[tableId]?.isJoined
-                        
+
                         return (
                           <div key={tableId} className="relative">
                             <button
                               onClick={() => handleTableSelect(table.number, floor.id)}
-                              className={`w-full p-4 rounded-xl border transition-colors ${
-                                isOccupied 
-                                  ? 'bg-red-50 border-red-200 hover:border-red-300' 
+                              className={`w-full p-4 rounded-xl border transition-colors ${isOccupied
+                                  ? 'bg-red-50 border-red-200 hover:border-red-300'
                                   : 'bg-emerald-50 border-emerald-200 hover:border-emerald-300'
-                              }`}
+                                }`}
                             >
                               <div className="text-center">
-                                <div className={`w-12 h-12 mx-auto mb-3 rounded-xl flex items-center justify-center ${
-                                  isOccupied ? 'bg-red-100' : 'bg-emerald-100'
-                                }`}>
+                                <div className={`w-12 h-12 mx-auto mb-3 rounded-xl flex items-center justify-center ${isOccupied ? 'bg-red-100' : 'bg-emerald-100'
+                                  }`}>
                                   <Table className={isOccupied ? "text-red-600" : "text-emerald-600"} size={24} />
                                 </div>
                                 <div className="font-semibold text-gray-900 mb-2">{table.displayName}</div>
-                                <div className={`px-3 py-1 text-xs font-medium rounded-full ${
-                                  isOccupied 
-                                    ? 'bg-red-600 text-white' 
+                                <div className={`px-3 py-1 text-xs font-medium rounded-full ${isOccupied
+                                    ? 'bg-red-600 text-white'
                                     : 'bg-emerald-600 text-white'
-                                }`}>
+                                  }`}>
                                   {isOccupied ? 'Occupied' : 'Available'}
                                 </div>
 
@@ -1107,13 +1108,13 @@ const Captain = () => {
       ) : (
         // List View
         <div className="space-y-2">
-          {floorConfig.flatMap(floor => 
+          {floorConfig.flatMap(floor =>
             floor.tables.map(table => {
               const tableId = getTableId(table.number, floor.id)
               const status = tables[tableId]?.status || 'available'
               const isOccupied = status === 'occupied'
               const ordersCount = getActiveOrdersCount(tableId)
-              
+
               return (
                 <button
                   key={tableId}
@@ -1121,9 +1122,8 @@ const Captain = () => {
                   className="w-full p-4 bg-white rounded-xl border border-gray-200 hover:border-emerald-300 transition-colors flex items-center justify-between"
                 >
                   <div className="flex items-center gap-3">
-                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
-                      isOccupied ? 'bg-red-100' : 'bg-emerald-100'
-                    }`}>
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${isOccupied ? 'bg-red-100' : 'bg-emerald-100'
+                      }`}>
                       <Table className={isOccupied ? "text-red-600" : "text-emerald-600"} size={20} />
                     </div>
                     <div className="text-left">
@@ -1170,7 +1170,7 @@ const Captain = () => {
               <ArrowLeft size={18} />
               <span className="font-medium">Back</span>
             </button>
-            
+
             <div className="text-center">
               <h2 className="font-semibold text-gray-900 text-lg">{selectedTable?.displayName}</h2>
               <div className="text-xs text-gray-500">
@@ -1190,7 +1190,7 @@ const Captain = () => {
                   </span>
                 </button>
               )}
-              
+
               <button
                 onClick={() => setShowOrderSummary(true)}
                 className="relative w-9 h-9 bg-emerald-100 hover:bg-emerald-200 rounded-xl flex items-center justify-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
@@ -1241,11 +1241,10 @@ const Captain = () => {
               <button
                 key={category}
                 onClick={() => setActiveCategory(category)}
-                className={`px-3 py-2 text-sm font-medium rounded-xl whitespace-nowrap transition-colors ${
-                  activeCategory === category
+                className={`px-3 py-2 text-sm font-medium rounded-xl whitespace-nowrap transition-colors ${activeCategory === category
                     ? 'bg-emerald-600 text-white'
                     : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-                }`}
+                  }`}
               >
                 {category}
               </button>
@@ -1259,7 +1258,7 @@ const Captain = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
           {(searchTerm ? filteredMenuItems[activeCategory] : menuItems[activeCategory])?.map(item => {
             const inCart = selectedItems.find(i => i.id === item.id)
-            
+
             return (
               <div
                 key={item.id}
@@ -1340,7 +1339,7 @@ const Captain = () => {
               ₹{getTotalTableAmount(selectedTable?.id)}
             </span>
           </div>
-          
+
           {getActiveOrdersCount(selectedTable?.id) > 0 ? (
             <div className="space-y-2">
               {getTableOrders(selectedTable?.id).slice(0, 2).map((order) => (
@@ -1351,7 +1350,7 @@ const Captain = () => {
                         #{order.orderNumber}
                       </span>
                       <span className="text-xs text-gray-500">
-                        {new Date(order.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                        {new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </span>
                     </div>
                     <button
@@ -1460,7 +1459,7 @@ const Captain = () => {
                       </div>
                       <div className="flex items-center gap-2">
                         <span className="text-sm text-gray-500">
-                          {new Date(order.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                          {new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         </span>
                         <span className="font-bold text-emerald-600">₹{order.total}</span>
                       </div>
@@ -1541,7 +1540,7 @@ const Captain = () => {
                 <p className="text-xs text-gray-500">Restaurant Management</p>
               </div>
             </div>
-            
+
             {currentStep === 'selectTable' && isInitializing && (
               <div className="flex items-center gap-2 px-3 py-1.5 bg-red-50 text-red-600 rounded-lg">
                 <Loader2 size={14} className="animate-spin" />
