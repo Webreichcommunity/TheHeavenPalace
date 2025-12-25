@@ -14,7 +14,7 @@ let globalBluetoothConnection = {
 const Billing = () => {
   const [finalBill, setFinalBill] = useState(null)
   const [discount, setDiscount] = useState(0)
-  const [taxRate] = useState(18)
+  const [taxRate] = useState(0)
   const [isPrinting, setIsPrinting] = useState(false)
   const [isCompleted, setIsCompleted] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -431,13 +431,9 @@ const Billing = () => {
         <span>Subtotal</span>
         <span>₹${totals.subtotal.toFixed(2)}</span>
       </div>
-      <div style="display:flex; justify-content:space-between; margin-top:2px;">
-        <span>GST (${taxRate}%)</span>
-        <span>₹${totals.tax.toFixed(2)}</span>
-      </div>
       <div style="display:flex; justify-content:space-between; font-size:15px; font-weight:bold; margin-top:5px;">
         <span>TOTAL</span>
-        <span>₹${totals.total.toFixed(2)}</span>
+        <span>₹${totals.subtotal.toFixed(2)}</span>
       </div>
     </div>
 
@@ -641,7 +637,7 @@ const Billing = () => {
 
     const subtotal = bill.finalTotal
     const tax = (subtotal * taxRate) / 100
-    const total = subtotal + tax - discount
+    const total = subtotal + 0 - discount
 
     return { subtotal, tax, total }
   }
@@ -968,10 +964,7 @@ const Billing = () => {
                           <span className="text-gray-600">Subtotal</span>
                           <span className="font-medium">₹{totals.subtotal.toFixed(2)}</span>
                         </div>
-                        <div className="flex justify-between text-sm">
-                          <span className="text-gray-600">GST ({taxRate}%)</span>
-                          <span className="font-medium">₹{totals.tax.toFixed(2)}</span>
-                        </div>
+                      
                         <div className="flex justify-between items-center text-sm">
                           <span className="text-gray-600">Discount</span>
                           <input

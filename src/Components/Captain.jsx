@@ -647,6 +647,25 @@ const Captain = () => {
     }
   }
 
+  const handleQuantityChange = (id, action, currentQty) => {
+    let newQty = currentQty;
+
+    if (action === "plus") {
+      newQty = currentQty === 0.5 ? 1 : currentQty + 1;
+    }
+
+    if (action === "minus") {
+      if (currentQty === 1) {
+        newQty = 0.5;
+      } else {
+        newQty = Math.max(0.5, currentQty - 1);
+      }
+    }
+
+    updateQuantity(id, newQty);
+  };
+
+
   const totalAmount = selectedItems.reduce((sum, item) => sum + (item.price * item.quantity), 0)
   const totalItems = selectedItems.reduce((sum, item) => sum + item.quantity, 0)
 
@@ -856,10 +875,10 @@ const Captain = () => {
                     onClick={() => !isOccupied && toggleTableForJoin(table.number, floor.id)}
                     disabled={isOccupied}
                     className={`p-3 rounded-xl border transition-colors ${isSelected
-                        ? 'bg-blue-50 border-blue-500'
-                        : isOccupied
-                          ? 'bg-gray-50 border-gray-200 cursor-not-allowed opacity-50'
-                          : 'bg-white border-gray-200 hover:border-blue-300'
+                      ? 'bg-blue-50 border-blue-500'
+                      : isOccupied
+                        ? 'bg-gray-50 border-gray-200 cursor-not-allowed opacity-50'
+                        : 'bg-white border-gray-200 hover:border-blue-300'
                       }`}
                   >
                     <div className="flex flex-col items-center gap-1">
@@ -969,8 +988,8 @@ const Captain = () => {
                 }
               }}
               className={`flex-1 py-2.5 px-3 text-sm font-medium rounded-xl transition-colors ${selectedFloor === floor.id
-                  ? 'bg-emerald-600 text-white'
-                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                ? 'bg-emerald-600 text-white'
+                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
                 }`}
             >
               <div className="flex items-center justify-center gap-2">
@@ -999,8 +1018,8 @@ const Captain = () => {
                 >
                   <div className="flex items-center gap-3">
                     <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${floor.id === '1' ? 'bg-emerald-50' :
-                        floor.id === '2' ? 'bg-amber-50' :
-                          'bg-blue-50'
+                      floor.id === '2' ? 'bg-amber-50' :
+                        'bg-blue-50'
                       }`}>
                       <Building size={20} className={floor.color} />
                     </div>
@@ -1043,8 +1062,8 @@ const Captain = () => {
                             <button
                               onClick={() => handleTableSelect(table.number, floor.id)}
                               className={`w-full p-4 rounded-xl border transition-colors ${isOccupied
-                                  ? 'bg-red-50 border-red-200 hover:border-red-300'
-                                  : 'bg-emerald-50 border-emerald-200 hover:border-emerald-300'
+                                ? 'bg-red-50 border-red-200 hover:border-red-300'
+                                : 'bg-emerald-50 border-emerald-200 hover:border-emerald-300'
                                 }`}
                             >
                               <div className="text-center">
@@ -1054,8 +1073,8 @@ const Captain = () => {
                                 </div>
                                 <div className="font-semibold text-gray-900 mb-2">{table.displayName}</div>
                                 <div className={`px-3 py-1 text-xs font-medium rounded-full ${isOccupied
-                                    ? 'bg-red-600 text-white'
-                                    : 'bg-emerald-600 text-white'
+                                  ? 'bg-red-600 text-white'
+                                  : 'bg-emerald-600 text-white'
                                   }`}>
                                   {isOccupied ? 'Occupied' : 'Available'}
                                 </div>
@@ -1242,8 +1261,8 @@ const Captain = () => {
                 key={category}
                 onClick={() => setActiveCategory(category)}
                 className={`px-3 py-2 text-sm font-medium rounded-xl whitespace-nowrap transition-colors ${activeCategory === category
-                    ? 'bg-emerald-600 text-white'
-                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                  ? 'bg-emerald-600 text-white'
+                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
                   }`}
               >
                 {category}
@@ -1288,24 +1307,55 @@ const Captain = () => {
                   </div>
 
                   {inCart ? (
+                    // <div className="flex items-center justify-between bg-emerald-50 rounded-xl p-1">
+                    //   <button
+                    //     onClick={() => updateQuantity(item.id, inCart.quantity - 0.5)}
+                    //     className="w-8 h-8 bg-white rounded-lg flex items-center justify-center hover:bg-gray-50 transition-colors"
+                    //   >
+                    //     <Minus size={14} className="text-emerald-600" />
+                    //   </button>
+                    //   <div className="flex flex-col items-center">
+                    //     <span className="font-bold text-emerald-700">{inCart.quantity}</span>
+                    //     <span className="text-xs text-emerald-600 font-medium">in cart</span>
+                    //   </div>
+                    //   <button
+                    //     onClick={() => updateQuantity(item.id, inCart.quantity + 1)}
+                    //     className="w-8 h-8 bg-emerald-600 rounded-lg flex items-center justify-center hover:bg-emerald-700 transition-colors"
+                    //   >
+                    //     <Plus size={14} className="text-white" />
+                    //   </button>
+                    // </div>
+
                     <div className="flex items-center justify-between bg-emerald-50 rounded-xl p-1">
                       <button
-                        onClick={() => updateQuantity(item.id, inCart.quantity - 1)}
+                        onClick={() =>
+                          handleQuantityChange(item.id, "minus", inCart.quantity)
+                        }
                         className="w-8 h-8 bg-white rounded-lg flex items-center justify-center hover:bg-gray-50 transition-colors"
                       >
                         <Minus size={14} className="text-emerald-600" />
                       </button>
+
                       <div className="flex flex-col items-center">
-                        <span className="font-bold text-emerald-700">{inCart.quantity}</span>
-                        <span className="text-xs text-emerald-600 font-medium">in cart</span>
+                        <span className="font-bold text-emerald-700">
+                          {inCart.quantity}
+                        </span>
+                        <span className="text-xs text-emerald-600 font-medium">
+                          in cart
+                        </span>
                       </div>
+
                       <button
-                        onClick={() => updateQuantity(item.id, inCart.quantity + 1)}
+                        onClick={() =>
+                          handleQuantityChange(item.id, "plus", inCart.quantity)
+                        }
                         className="w-8 h-8 bg-emerald-600 rounded-lg flex items-center justify-center hover:bg-emerald-700 transition-colors"
                       >
                         <Plus size={14} className="text-white" />
                       </button>
                     </div>
+
+
                   ) : (
                     <button
                       onClick={() => addToOrder(item)}
