@@ -28,7 +28,7 @@ import {
 
 const ParcelPage = () => {
   const navigate = useNavigate()
-  const [activeCategory, setActiveCategory] = useState('starters')
+  const [activeCategory, setActiveCategory] = useState('all') // Changed to 'all' as default
   const [selectedItems, setSelectedItems] = useState([])
   const [customerNotes, setCustomerNotes] = useState('')
   const [searchTerm, setSearchTerm] = useState('')
@@ -127,6 +127,110 @@ const ParcelPage = () => {
       off(notificationsRef)
     }
   }, [])
+
+  // Updated filteredMenuItems to handle 'all' category search
+  const filteredMenuItems = React.useMemo(() => {
+    const searchLower = searchTerm.toLowerCase().trim()
+    
+    // If no search term, return all items grouped by category
+    if (!searchLower) {
+      // If 'all' category is selected, return all items grouped
+      if (activeCategory === 'all') {
+        return menuItems
+      }
+      // If specific category is selected, return only that category
+      return menuItems[activeCategory] ? { [activeCategory]: menuItems[activeCategory] } : {}
+    }
+
+    // When searching with 'all' category selected
+    if (activeCategory === 'all') {
+      const results = {}
+      Object.keys(menuItems).forEach(category => {
+        const filtered = menuItems[category].filter(item =>
+          item.name.toLowerCase().includes(searchLower) ||
+          (item.description && item.description.toLowerCase().includes(searchLower))
+        )
+        if (filtered.length > 0) {
+          results[category] = filtered
+        }
+      })
+      return results
+    }
+
+    // When searching within a specific category
+    const categoryItems = menuItems[activeCategory] || []
+    const filtered = categoryItems.filter(item =>
+      item.name.toLowerCase().includes(searchLower) ||
+      (item.description && item.description.toLowerCase().includes(searchLower))
+    )
+    
+    return filtered.length > 0 ? { [activeCategory]: filtered } : {}
+  }, [menuItems, searchTerm, activeCategory])
+
+  // Helper function to render menu item card
+  const renderMenuItemCard = (item) => {
+    const inCart = selectedItems.find(i => i.id === item.id)
+    
+    return (
+      <div
+        key={item.id}
+        className="bg-white rounded-xl border border-gray-200 hover:border-emerald-300 transition-colors overflow-hidden group"
+      >
+        <div className="p-4">
+          <div className="flex justify-between items-start mb-3">
+            <div className="flex-1">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-2xl">{item.emoji}</span>
+                {item.popular && (
+                  <span className="bg-emerald-50 text-emerald-700 text-xs px-2 py-1 rounded-full font-medium border border-emerald-100">
+                    Popular
+                  </span>
+                )}
+              </div>
+              <h3 className="font-semibold text-gray-900 text-base mb-1 group-hover:text-emerald-700 transition-colors">{item.name}</h3>
+              <div className="flex items-center gap-2 text-sm text-gray-500">
+                <Clock size={14} className="text-emerald-600" />
+                <span>{item.preparationTime} min</span>
+                {item.spicy && <span className="text-red-500">🌶️</span>}
+              </div>
+            </div>
+            <div className="text-right">
+              <div className="font-bold text-emerald-600 text-lg">₹{item.price}</div>
+            </div>
+          </div>
+
+          {inCart ? (
+            <div className="flex items-center justify-between bg-emerald-50 rounded-xl p-1 border border-emerald-100">
+              <button
+                onClick={() => updateQuantity(item.id, inCart.quantity - 1)}
+                className="w-8 h-8 bg-white rounded-lg flex items-center justify-center hover:bg-gray-50 transition-colors border border-emerald-200"
+              >
+                <Minus size={14} className="text-emerald-600" />
+              </button>
+              <div className="flex flex-col items-center">
+                <span className="font-bold text-emerald-700">{inCart.quantity}</span>
+                <span className="text-xs text-emerald-600 font-medium">in cart</span>
+              </div>
+              <button
+                onClick={() => updateQuantity(item.id, inCart.quantity + 1)}
+                className="w-8 h-8 bg-emerald-600 rounded-lg flex items-center justify-center hover:bg-emerald-700 transition-colors"
+              >
+                <Plus size={14} className="text-white" />
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => addToOrder(item)}
+              className="w-full py-2.5 bg-emerald-50 text-emerald-700 rounded-xl font-medium hover:bg-emerald-100 transition-colors border border-emerald-200 flex items-center justify-center gap-2 group-hover:bg-emerald-100 group-hover:border-emerald-300"
+            >
+              <Plus size={16} />
+              <span>Add to Order</span>
+            </button>
+          )}
+        </div>
+      </div>
+    )
+  }
 
   // Submit parcel order
   const submitParcelOrder = async () => {
@@ -307,16 +411,6 @@ const ParcelPage = () => {
       setLoading(false)
     }
   }
-
-  const filteredMenuItems = React.useMemo(() => {
-    return Object.keys(menuItems).reduce((acc, category) => {
-      const filtered = menuItems[category].filter(item => 
-        item.name.toLowerCase().includes(searchTerm.toLowerCase())
-      )
-      if (filtered.length > 0) acc[category] = filtered
-      return acc
-    }, {})
-  }, [menuItems, searchTerm])
 
   const addToOrder = (item) => {
     const existingItem = selectedItems.find(i => i.id === item.id)
@@ -713,7 +807,7 @@ const ParcelPage = () => {
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
                 <input
                   type="text"
-                  placeholder="Search menu..."
+                  placeholder="Search all menu items..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="w-full pl-10 pr-4 py-2.5 text-sm bg-white border border-gray-200 rounded-xl focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/20 transition-colors"
@@ -721,9 +815,22 @@ const ParcelPage = () => {
               </div>
             </div>
 
-            {/* Category Tabs - Green/White Theme */}
+            {/* Category Tabs - Updated with "All" */}
             <div className="px-4 pb-2 overflow-x-auto">
               <div className="flex gap-1">
+                {/* All Category Button */}
+                <button
+                  onClick={() => setActiveCategory('all')}
+                  className={`px-3 py-2 text-sm font-medium rounded-xl whitespace-nowrap transition-colors ${
+                    activeCategory === 'all'
+                      ? 'bg-emerald-600 text-white'
+                      : 'bg-white text-gray-600 hover:text-gray-900 hover:bg-gray-100 border border-gray-200'
+                  }`}
+                >
+                  All
+                </button>
+                
+                {/* Other Categories */}
                 {Object.keys(menuItems).map(category => (
                   <button
                     key={category}
@@ -866,7 +973,7 @@ const ParcelPage = () => {
               </div>
             )}
 
-            {/* Menu Items - Green/White Theme */}
+            {/* Menu Items */}
             <div className="bg-white rounded-xl border border-gray-200 p-4 mb-6">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="font-semibold text-gray-900 flex items-center gap-2">
@@ -878,83 +985,44 @@ const ParcelPage = () => {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-                {(searchTerm ? filteredMenuItems[activeCategory] : menuItems[activeCategory])?.map(item => {
-                  const inCart = selectedItems.find(i => i.id === item.id)
-                  
-                  return (
-                    <div
-                      key={item.id}
-                      className="bg-white rounded-xl border border-gray-200 hover:border-emerald-300 transition-colors overflow-hidden group"
-                    >
-                      <div className="p-4">
-                        <div className="flex justify-between items-start mb-3">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-2">
-                              <span className="text-2xl">{item.emoji}</span>
-                              {item.popular && (
-                                <span className="bg-emerald-50 text-emerald-700 text-xs px-2 py-1 rounded-full font-medium border border-emerald-100">
-                                  Popular
-                                </span>
-                              )}
-                            </div>
-                            <h3 className="font-semibold text-gray-900 text-base mb-1 group-hover:text-emerald-700 transition-colors">{item.name}</h3>
-                            <div className="flex items-center gap-2 text-sm text-gray-500">
-                              <Clock size={14} className="text-emerald-600" />
-                              <span>{item.preparationTime} min</span>
-                              {item.spicy && <span className="text-red-500">🌶️</span>}
-                            </div>
-                          </div>
-                          <div className="text-right">
-                            <div className="font-bold text-emerald-600 text-lg">₹{item.price}</div>
-                          </div>
+              {/* Show all categories when 'All' is selected */}
+              {activeCategory === 'all' ? (
+                <div className="space-y-6">
+                  {Object.keys(filteredMenuItems).length > 0 ? (
+                    Object.keys(filteredMenuItems).map(category => (
+                      <div key={category}>
+                        <h3 className="text-lg font-semibold text-gray-900 mb-3 px-2">{category}</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                          {filteredMenuItems[category]?.map(item => renderMenuItemCard(item))}
                         </div>
-
-                        {inCart ? (
-                          <div className="flex items-center justify-between bg-emerald-50 rounded-xl p-1 border border-emerald-100">
-                            <button
-                              onClick={() => updateQuantity(item.id, inCart.quantity - 1)}
-                              className="w-8 h-8 bg-white rounded-lg flex items-center justify-center hover:bg-gray-50 transition-colors border border-emerald-200"
-                            >
-                              <Minus size={14} className="text-emerald-600" />
-                            </button>
-                            <div className="flex flex-col items-center">
-                              <span className="font-bold text-emerald-700">{inCart.quantity}</span>
-                              <span className="text-xs text-emerald-600 font-medium">in cart</span>
-                            </div>
-                            <button
-                              onClick={() => updateQuantity(item.id, inCart.quantity + 1)}
-                              className="w-8 h-8 bg-emerald-600 rounded-lg flex items-center justify-center hover:bg-emerald-700 transition-colors"
-                            >
-                              <Plus size={14} className="text-white" />
-                            </button>
-                          </div>
-                        ) : (
-                          <button
-                            onClick={() => addToOrder(item)}
-                            className="w-full py-2.5 bg-emerald-50 text-emerald-700 rounded-xl font-medium hover:bg-emerald-100 transition-colors border border-emerald-200 flex items-center justify-center gap-2 group-hover:bg-emerald-100 group-hover:border-emerald-300"
-                          >
-                            <Plus size={16} />
-                            <span>Add to Order</span>
-                          </button>
-                        )}
                       </div>
+                    ))
+                  ) : (
+                    <div className="text-center py-12">
+                      <Search className="mx-auto text-gray-400 mb-3" size={32} />
+                      <p className="text-gray-600 font-medium">No items found</p>
+                      <p className="text-gray-500 text-sm mt-1">Try a different search</p>
                     </div>
-                  )
-                })}
-              </div>
-
-              {searchTerm && Object.keys(filteredMenuItems).length === 0 && (
-                <div className="text-center py-12">
-                  <Search className="mx-auto text-gray-400 mb-3" size={32} />
-                  <p className="text-gray-600 font-medium">No items found</p>
-                  <p className="text-gray-500 text-sm mt-1">Try a different search</p>
+                  )}
+                </div>
+              ) : (
+                /* Show specific category */
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                  {filteredMenuItems[activeCategory]?.length > 0 ? (
+                    filteredMenuItems[activeCategory]?.map(item => renderMenuItemCard(item))
+                  ) : (
+                    <div className="col-span-full text-center py-12">
+                      <Search className="mx-auto text-gray-400 mb-3" size={32} />
+                      <p className="text-gray-600 font-medium">No items found in {activeCategory}</p>
+                      <p className="text-gray-500 text-sm mt-1">Try a different search or category</p>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
           </div>
 
-          {/* Bottom Action Bar - Green/White Theme */}
+          {/* Bottom Action Bar */}
           <div className="sticky bottom-0 border-t rounded-2xl border-gray-100 bg-white/95 backdrop-blur-sm shadow-lg">
             <div className="p-4">
               <div className="flex items-center justify-between gap-4">
@@ -965,7 +1033,6 @@ const ParcelPage = () => {
                         <ShoppingCart size={20} className="text-emerald-600" />
                       </div>
                       <div>
-                        {/* <p className="text-sm text-gray-600">Current Order</p> */}
                         <p className="font-semibold text-gray-900">₹{totalAmount}</p>
                       </div>
                       <button
@@ -984,7 +1051,7 @@ const ParcelPage = () => {
                   )}
                 </div>
                 
-                <div className="flex items-center  gap-3">
+                <div className="flex items-center gap-3">
                   {parcelOrders.length > 0 && (
                     <div className="text-right">
                       <div className="text-sm text-gray-600">Active Orders</div>
@@ -993,13 +1060,6 @@ const ParcelPage = () => {
                       </div>
                     </div>
                   )}
-                  {/* <button
-                    onClick={() => navigate('/captain')}
-                    className="px-4 py-2 bg-gray-100 text-gray-700 rounded-xl font-medium hover:bg-gray-200 transition-colors flex items-center gap-2"
-                  >
-                    <Home size={16} />
-                    <span>Tables View</span>
-                  </button> */}
                 </div>
               </div>
             </div>

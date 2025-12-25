@@ -41,7 +41,7 @@ import {
 
 const Captain = () => {
   const navigate = useNavigate()
-  const [activeCategory, setActiveCategory] = useState('starters')
+  const [activeCategory, setActiveCategory] = useState('all') // Changed to 'all' as default
   const [selectedItems, setSelectedItems] = useState([])
   const [selectedTable, setSelectedTable] = useState(null)
   const [customerNotes, setCustomerNotes] = useState('')
@@ -247,15 +247,44 @@ const Captain = () => {
     }
   }, [tables, activeOrders, getTableId])
 
+  // Updated filteredMenuItems to handle 'all' category search
   const filteredMenuItems = React.useMemo(() => {
-    return Object.keys(menuItems).reduce((acc, category) => {
-      const filtered = menuItems[category].filter(item =>
-        item.name.toLowerCase().includes(searchTerm.toLowerCase())
-      )
-      if (filtered.length > 0) acc[category] = filtered
-      return acc
-    }, {})
-  }, [menuItems, searchTerm])
+    const searchLower = searchTerm.toLowerCase().trim()
+    
+    // If no search term, return all items grouped by category
+    if (!searchLower) {
+      // If 'all' category is selected, return all items grouped
+      if (activeCategory === 'all') {
+        return menuItems
+      }
+      // If specific category is selected, return only that category
+      return menuItems[activeCategory] ? { [activeCategory]: menuItems[activeCategory] } : {}
+    }
+
+    // When searching with 'all' category selected
+    if (activeCategory === 'all') {
+      const results = {}
+      Object.keys(menuItems).forEach(category => {
+        const filtered = menuItems[category].filter(item =>
+          item.name.toLowerCase().includes(searchLower) ||
+          (item.description && item.description.toLowerCase().includes(searchLower))
+        )
+        if (filtered.length > 0) {
+          results[category] = filtered
+        }
+      })
+      return results
+    }
+
+    // When searching within a specific category
+    const categoryItems = menuItems[activeCategory] || []
+    const filtered = categoryItems.filter(item =>
+      item.name.toLowerCase().includes(searchLower) ||
+      (item.description && item.description.toLowerCase().includes(searchLower))
+    )
+    
+    return filtered.length > 0 ? { [activeCategory]: filtered } : {}
+  }, [menuItems, searchTerm, activeCategory])
 
   const getTableStatus = useCallback((tableNumber, floorId) => {
     const tableId = getTableId(tableNumber, floorId)
@@ -665,7 +694,6 @@ const Captain = () => {
     updateQuantity(id, newQty);
   };
 
-
   const totalAmount = selectedItems.reduce((sum, item) => sum + (item.price * item.quantity), 0)
   const totalItems = selectedItems.reduce((sum, item) => sum + item.quantity, 0)
 
@@ -677,6 +705,77 @@ const Captain = () => {
       .filter(([_, t]) => t.joinedGroup === table.joinedGroup && t.id !== tableId)
       .map(([id, _]) => getDisplayTableNumber(id))
   }, [tables, getDisplayTableNumber])
+
+  // Helper function to render menu item card
+  const renderMenuItemCard = (item) => {
+    const inCart = selectedItems.find(i => i.id === item.id)
+    
+    return (
+      <div
+        key={item.id}
+        className="bg-white rounded-xl border border-gray-200 hover:border-emerald-300 transition-colors overflow-hidden"
+      >
+        <div className="p-4">
+          <div className="flex justify-between items-start mb-3">
+            <div className="flex-1">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-2xl">{item.emoji}</span>
+                {item.popular && (
+                  <span className="bg-yellow-100 text-yellow-700 text-xs px-2 py-1 rounded-full font-medium">
+                    Popular
+                  </span>
+                )}
+              </div>
+              <h3 className="font-semibold text-gray-900 text-base mb-1">{item.name}</h3>
+              <div className="flex items-center gap-2 text-sm text-gray-500">
+                <Clock size={14} />
+                <span>{item.preparationTime} min</span>
+                {item.spicy && <span className="text-red-500">🌶️</span>}
+              </div>
+            </div>
+            <div className="text-right">
+              <div className="font-bold text-emerald-600">₹{item.price}</div>
+            </div>
+          </div>
+
+          {inCart ? (
+            <div className="flex items-center justify-between bg-emerald-50 rounded-xl p-1">
+              <button
+                onClick={() => handleQuantityChange(item.id, "minus", inCart.quantity)}
+                className="w-8 h-8 bg-white rounded-lg flex items-center justify-center hover:bg-gray-50 transition-colors"
+              >
+                <Minus size={14} className="text-emerald-600" />
+              </button>
+
+              <div className="flex flex-col items-center">
+                <span className="font-bold text-emerald-700">
+                  {inCart.quantity}
+                </span>
+                <span className="text-xs text-emerald-600 font-medium">
+                  in cart
+                </span>
+              </div>
+
+              <button
+                onClick={() => handleQuantityChange(item.id, "plus", inCart.quantity)}
+                className="w-8 h-8 bg-emerald-600 rounded-lg flex items-center justify-center hover:bg-emerald-700 transition-colors"
+              >
+                <Plus size={14} className="text-white" />
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => addToOrder(item)}
+              className="w-full py-2.5 bg-emerald-50 text-emerald-700 rounded-xl font-medium hover:bg-emerald-100 transition-colors flex items-center justify-center gap-2"
+            >
+              <Plus size={16} />
+              <span>Add to Order</span>
+            </button>
+          )}
+        </div>
+      </div>
+    )
+  }
 
   const renderOrderSummaryModal = () => (
     <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -943,9 +1042,6 @@ const Captain = () => {
       <div className="mb-6">
         <div className="flex items-center justify-between mb-3">
           <div>
-            {/* <h1 className="text-2xl font-semibold text-gray-900">Tables</h1>
-            <p className="text-sm text-gray-500">Select a table to start</p> 
-            */}
             <Link to="/parcel">
               <button className='bg-red-600 flex items-center gap-1 text-white px-3 py-2 rounded-lg'>
                 <Package size={16} />
@@ -1187,7 +1283,6 @@ const Captain = () => {
               className="flex items-center gap-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 px-3 py-1.5 rounded-xl transition-colors"
             >
               <ArrowLeft size={18} />
-              <span className="font-medium">Back</span>
             </button>
 
             <div className="text-center">
@@ -1245,7 +1340,7 @@ const Captain = () => {
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
             <input
               type="text"
-              placeholder="Search menu..."
+              placeholder="Search all menu items..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-10 pr-4 py-2.5 text-sm bg-white border border-gray-200 rounded-xl focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/20 transition-colors"
@@ -1253,9 +1348,21 @@ const Captain = () => {
           </div>
         </div>
 
-        {/* Category Tabs */}
+        {/* Category Tabs - Updated with "All" */}
         <div className="px-4 pb-2 overflow-x-auto">
           <div className="flex gap-1">
+            {/* All Category Button */}
+            <button
+              onClick={() => setActiveCategory('all')}
+              className={`px-3 py-2 text-sm font-medium rounded-xl whitespace-nowrap transition-colors ${activeCategory === 'all'
+                ? 'bg-emerald-600 text-white'
+                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                }`}
+            >
+              All
+            </button>
+            
+            {/* Other Categories */}
             {Object.keys(menuItems).map(category => (
               <button
                 key={category}
@@ -1274,108 +1381,38 @@ const Captain = () => {
 
       {/* Content Area */}
       <div className="flex-1 overflow-y-auto p-4">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-          {(searchTerm ? filteredMenuItems[activeCategory] : menuItems[activeCategory])?.map(item => {
-            const inCart = selectedItems.find(i => i.id === item.id)
-
-            return (
-              <div
-                key={item.id}
-                className="bg-white rounded-xl border border-gray-200 hover:border-emerald-300 transition-colors overflow-hidden"
-              >
-                <div className="p-4">
-                  <div className="flex justify-between items-start mb-3">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-2">
-                        <span className="text-2xl">{item.emoji}</span>
-                        {item.popular && (
-                          <span className="bg-yellow-100 text-yellow-700 text-xs px-2 py-1 rounded-full font-medium">
-                            Popular
-                          </span>
-                        )}
-                      </div>
-                      <h3 className="font-semibold text-gray-900 text-base mb-1">{item.name}</h3>
-                      <div className="flex items-center gap-2 text-sm text-gray-500">
-                        <Clock size={14} />
-                        <span>{item.preparationTime} min</span>
-                        {item.spicy && <span className="text-red-500">🌶️</span>}
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <div className="font-bold text-emerald-600">₹{item.price}</div>
-                    </div>
+        {activeCategory === 'all' ? (
+          // Show all categories when 'All' is selected
+          <div className="space-y-6">
+            {Object.keys(filteredMenuItems).length > 0 ? (
+              Object.keys(filteredMenuItems).map(category => (
+                <div key={category}>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-3 px-2">{category}</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {filteredMenuItems[category]?.map(item => renderMenuItemCard(item))}
                   </div>
-
-                  {inCart ? (
-                    // <div className="flex items-center justify-between bg-emerald-50 rounded-xl p-1">
-                    //   <button
-                    //     onClick={() => updateQuantity(item.id, inCart.quantity - 0.5)}
-                    //     className="w-8 h-8 bg-white rounded-lg flex items-center justify-center hover:bg-gray-50 transition-colors"
-                    //   >
-                    //     <Minus size={14} className="text-emerald-600" />
-                    //   </button>
-                    //   <div className="flex flex-col items-center">
-                    //     <span className="font-bold text-emerald-700">{inCart.quantity}</span>
-                    //     <span className="text-xs text-emerald-600 font-medium">in cart</span>
-                    //   </div>
-                    //   <button
-                    //     onClick={() => updateQuantity(item.id, inCart.quantity + 1)}
-                    //     className="w-8 h-8 bg-emerald-600 rounded-lg flex items-center justify-center hover:bg-emerald-700 transition-colors"
-                    //   >
-                    //     <Plus size={14} className="text-white" />
-                    //   </button>
-                    // </div>
-
-                    <div className="flex items-center justify-between bg-emerald-50 rounded-xl p-1">
-                      <button
-                        onClick={() =>
-                          handleQuantityChange(item.id, "minus", inCart.quantity)
-                        }
-                        className="w-8 h-8 bg-white rounded-lg flex items-center justify-center hover:bg-gray-50 transition-colors"
-                      >
-                        <Minus size={14} className="text-emerald-600" />
-                      </button>
-
-                      <div className="flex flex-col items-center">
-                        <span className="font-bold text-emerald-700">
-                          {inCart.quantity}
-                        </span>
-                        <span className="text-xs text-emerald-600 font-medium">
-                          in cart
-                        </span>
-                      </div>
-
-                      <button
-                        onClick={() =>
-                          handleQuantityChange(item.id, "plus", inCart.quantity)
-                        }
-                        className="w-8 h-8 bg-emerald-600 rounded-lg flex items-center justify-center hover:bg-emerald-700 transition-colors"
-                      >
-                        <Plus size={14} className="text-white" />
-                      </button>
-                    </div>
-
-
-                  ) : (
-                    <button
-                      onClick={() => addToOrder(item)}
-                      className="w-full py-2.5 bg-emerald-50 text-emerald-700 rounded-xl font-medium hover:bg-emerald-100 transition-colors flex items-center justify-center gap-2"
-                    >
-                      <Plus size={16} />
-                      <span>Add to Order</span>
-                    </button>
-                  )}
                 </div>
+              ))
+            ) : (
+              <div className="text-center py-12">
+                <Search className="mx-auto text-gray-400 mb-3" size={32} />
+                <p className="text-gray-600 font-medium">No items found</p>
+                <p className="text-gray-500 text-sm mt-1">Try a different search</p>
               </div>
-            )
-          })}
-        </div>
-
-        {searchTerm && Object.keys(filteredMenuItems).length === 0 && (
-          <div className="text-center py-12">
-            <Search className="mx-auto text-gray-400 mb-3" size={32} />
-            <p className="text-gray-600 font-medium">No items found</p>
-            <p className="text-gray-500 text-sm mt-1">Try a different search</p>
+            )}
+          </div>
+        ) : (
+          // Show specific category
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {filteredMenuItems[activeCategory]?.length > 0 ? (
+              filteredMenuItems[activeCategory]?.map(item => renderMenuItemCard(item))
+            ) : (
+              <div className="col-span-full text-center py-12">
+                <Search className="mx-auto text-gray-400 mb-3" size={32} />
+                <p className="text-gray-600 font-medium">No items found in {activeCategory}</p>
+                <p className="text-gray-500 text-sm mt-1">Try a different search or category</p>
+              </div>
+            )}
           </div>
         )}
       </div>
