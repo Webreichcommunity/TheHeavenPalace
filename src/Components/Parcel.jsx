@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ref, push, update, onValue, off, query, orderByChild } from 'firebase/database'
+import { ref, push, update, onValue, off, query, orderByChild, remove } from 'firebase/database'
 import { database } from '../Firebase/config'
 import { 
   ShoppingCart, 
@@ -23,12 +23,18 @@ import {
   Home,
   FileText,
   DollarSign,
-  Users
+  Users,
+  Printer,
+  AlertTriangle,
+  Bluetooth
 } from 'lucide-react'
+
+// Import printer service
+import { printerService, PrinterStatus, globalBluetoothConnection } from '../Components/printorder'
 
 const ParcelPage = () => {
   const navigate = useNavigate()
-  const [activeCategory, setActiveCategory] = useState('all') // Changed to 'all' as default
+  const [activeCategory, setActiveCategory] = useState('all')
   const [selectedItems, setSelectedItems] = useState([])
   const [customerNotes, setCustomerNotes] = useState('')
   const [searchTerm, setSearchTerm] = useState('')
@@ -40,6 +46,10 @@ const ParcelPage = () => {
   const [kitchenNotifications, setKitchenNotifications] = useState([])
   const [error, setError] = useState(null)
   const [isInitializing, setIsInitializing] = useState(true)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [orderToDelete, setOrderToDelete] = useState(null)
+  const [isConnecting, setIsConnecting] = useState(false)
+  const [isPrinting, setIsPrinting] = useState(false)
   
   // Parcel order state
   const [parcelOrders, setParcelOrders] = useState([])
@@ -132,17 +142,13 @@ const ParcelPage = () => {
   const filteredMenuItems = React.useMemo(() => {
     const searchLower = searchTerm.toLowerCase().trim()
     
-    // If no search term, return all items grouped by category
     if (!searchLower) {
-      // If 'all' category is selected, return all items grouped
       if (activeCategory === 'all') {
         return menuItems
       }
-      // If specific category is selected, return only that category
       return menuItems[activeCategory] ? { [activeCategory]: menuItems[activeCategory] } : {}
     }
 
-    // When searching with 'all' category selected
     if (activeCategory === 'all') {
       const results = {}
       Object.keys(menuItems).forEach(category => {
@@ -157,7 +163,6 @@ const ParcelPage = () => {
       return results
     }
 
-    // When searching within a specific category
     const categoryItems = menuItems[activeCategory] || []
     const filtered = categoryItems.filter(item =>
       item.name.toLowerCase().includes(searchLower) ||
@@ -167,72 +172,71 @@ const ParcelPage = () => {
     return filtered.length > 0 ? { [activeCategory]: filtered } : {}
   }, [menuItems, searchTerm, activeCategory])
 
-  // Helper function to render menu item card
-  const renderMenuItemCard = (item) => {
-    const inCart = selectedItems.find(i => i.id === item.id)
-    
-    return (
-      <div
-        key={item.id}
-        className="bg-white rounded-xl border border-gray-200 hover:border-emerald-300 transition-colors overflow-hidden group"
-      >
-        <div className="p-4">
-          <div className="flex justify-between items-start mb-3">
-            <div className="flex-1">
-              <div className="flex items-center gap-2 mb-2">
-                <span className="text-2xl">{item.emoji}</span>
-                {item.popular && (
-                  <span className="bg-emerald-50 text-emerald-700 text-xs px-2 py-1 rounded-full font-medium border border-emerald-100">
-                    Popular
-                  </span>
-                )}
-              </div>
-              <h3 className="font-semibold text-gray-900 text-base mb-1 group-hover:text-emerald-700 transition-colors">{item.name}</h3>
-              <div className="flex items-center gap-2 text-sm text-gray-500">
-                <Clock size={14} className="text-emerald-600" />
-                <span>{item.preparationTime} min</span>
-                {item.spicy && <span className="text-red-500">🌶️</span>}
-              </div>
-            </div>
-            <div className="text-right">
-              <div className="font-bold text-emerald-600 text-lg">₹{item.price}</div>
-            </div>
-          </div>
-
-          {inCart ? (
-            <div className="flex items-center justify-between bg-emerald-50 rounded-xl p-1 border border-emerald-100">
-              <button
-                onClick={() => updateQuantity(item.id, inCart.quantity - 1)}
-                className="w-8 h-8 bg-white rounded-lg flex items-center justify-center hover:bg-gray-50 transition-colors border border-emerald-200"
-              >
-                <Minus size={14} className="text-emerald-600" />
-              </button>
-              <div className="flex flex-col items-center">
-                <span className="font-bold text-emerald-700">{inCart.quantity}</span>
-                <span className="text-xs text-emerald-600 font-medium">in cart</span>
-              </div>
-              <button
-                onClick={() => updateQuantity(item.id, inCart.quantity + 1)}
-                className="w-8 h-8 bg-emerald-600 rounded-lg flex items-center justify-center hover:bg-emerald-700 transition-colors"
-              >
-                <Plus size={14} className="text-white" />
-              </button>
-            </div>
-          ) : (
-            <button
-              onClick={() => addToOrder(item)}
-              className="w-full py-2.5 bg-emerald-50 text-emerald-700 rounded-xl font-medium hover:bg-emerald-100 transition-colors border border-emerald-200 flex items-center justify-center gap-2 group-hover:bg-emerald-100 group-hover:border-emerald-300"
-            >
-              <Plus size={16} />
-              <span>Add to Order</span>
-            </button>
-          )}
-        </div>
-      </div>
-    )
+  // Connect to Bluetooth printer
+  const connectBluetooth = async () => {
+    setIsConnecting(true)
+    try {
+      await printerService.connectBluetooth((connected) => {
+        console.log('Bluetooth connection state changed:', connected)
+      })
+    } catch (error) {
+      console.error('Bluetooth connection failed:', error)
+      setError('Failed to connect to Bluetooth printer')
+    } finally {
+      setIsConnecting(false)
+    }
   }
 
-  // Submit parcel order
+  // Disconnect Bluetooth printer
+  const disconnectBluetooth = async () => {
+    try {
+      await printerService.disconnectBluetooth()
+    } catch (error) {
+      console.error('Bluetooth disconnection failed:', error)
+    }
+  }
+
+  // Print order to thermal printer
+  const printOrderToPrinter = async (orderData) => {
+    if (!globalBluetoothConnection.connected) {
+      // Try to connect first
+      const connected = await printerService.connectBluetooth()
+      if (!connected) {
+        // Fallback to browser print
+        printerService.fallbackPrintOrder(orderData, 'Parcel', orderData.orderNumber)
+        return false
+      }
+    }
+
+    setIsPrinting(true)
+    try {
+      await printerService.printOrderReceipt(
+        orderData,
+        'Parcel',
+        orderData.orderNumber,
+        {
+          onPrintStart: () => console.log('Printing started...'),
+          onPrintComplete: () => {
+            console.log('Print completed successfully')
+            setIsPrinting(false)
+          },
+          onPrintError: (error) => {
+            console.error('Print error:', error)
+            setIsPrinting(false)
+            setError('Print failed, check printer connection')
+            setTimeout(() => setError(null), 3000)
+          }
+        }
+      )
+      return true
+    } catch (error) {
+      console.error('Print error:', error)
+      setIsPrinting(false)
+      return false
+    }
+  }
+
+  // Submit parcel order with print functionality
   const submitParcelOrder = async () => {
     if (selectedItems.length === 0) {
       setError('Please add items to the order')
@@ -266,6 +270,7 @@ const ParcelPage = () => {
     try {
       const ordersRef = ref(database, 'orders')
       const newOrderRef = await push(ordersRef, orderData)
+      const orderId = newOrderRef.key
 
       // Create parcel order notification
       const notificationsRef = ref(database, 'notifications')
@@ -273,11 +278,14 @@ const ParcelPage = () => {
         type: 'new_parcel_order',
         message: `New parcel order #${orderData.orderNumber}`,
         tableNumber: 'Parcel',
-        orderId: newOrderRef.key,
+        orderId: orderId,
         itemsCount: selectedItems.length,
         createdAt: new Date().toISOString(),
         read: false
       })
+
+      // Print order to thermal printer
+      await printOrderToPrinter(orderData)
 
       setIsOrderPlaced(true)
       setShowOrderSummary(false)
@@ -290,6 +298,41 @@ const ParcelPage = () => {
     } catch (error) {
       console.error('Error placing parcel order:', error)
       setError('Failed to place order')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Delete parcel order
+  const deleteParcelOrder = async () => {
+    if (!orderToDelete) return
+
+    setLoading(true)
+    setError(null)
+
+    try {
+      // Delete the order from Firebase
+      const orderRef = ref(database, `orders/${orderToDelete.id}`)
+      await remove(orderRef)
+
+      // Create delete notification
+      const notificationsRef = ref(database, 'notifications')
+      await push(notificationsRef, {
+        type: 'parcel_order_deleted',
+        message: `Parcel order #${orderToDelete.orderNumber} was deleted`,
+        tableNumber: 'Parcel',
+        orderId: orderToDelete.id,
+        deletedAt: new Date().toISOString(),
+        read: false
+      })
+
+      // Close modal
+      setShowDeleteConfirm(false)
+      setOrderToDelete(null)
+
+    } catch (error) {
+      console.error('Error deleting parcel order:', error)
+      setError('Failed to delete order')
     } finally {
       setLoading(false)
     }
@@ -535,11 +578,16 @@ const ParcelPage = () => {
               </button>
               <button
                 onClick={submitParcelOrder}
-                disabled={loading}
+                disabled={loading || isPrinting}
                 className="px-5 py-2.5 bg-emerald-600 text-white rounded-xl font-medium hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
               >
                 {loading ? (
                   <Loader2 size={16} className="animate-spin" />
+                ) : isPrinting ? (
+                  <>
+                    <Loader2 size={16} className="animate-spin" />
+                    <span>Printing...</span>
+                  </>
                 ) : (
                   <>
                     <Send size={16} />
@@ -719,6 +767,157 @@ const ParcelPage = () => {
     </div>
   )
 
+  const renderDeleteConfirmModal = () => (
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-white/95 backdrop-blur-sm rounded-2xl w-full max-w-md border border-gray-200/80 shadow-2xl">
+        <div className="p-5 border-b border-gray-100 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-red-50 rounded-xl flex items-center justify-center">
+              <AlertTriangle size={20} className="text-red-600" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-gray-800">Delete Order</h3>
+              <p className="text-sm text-gray-500">Order #{orderToDelete?.orderNumber}</p>
+            </div>
+          </div>
+          <button
+            onClick={() => {
+              setShowDeleteConfirm(false)
+              setOrderToDelete(null)
+            }}
+            className="w-8 h-8 hover:bg-gray-100 rounded-xl flex items-center justify-center transition-colors"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="p-5">
+          <div className="bg-red-50 rounded-xl p-4 mb-4 border border-red-100">
+            <p className="text-sm text-gray-800 mb-2">Are you sure you want to delete this parcel order?</p>
+            <div className="space-y-2">
+              {orderToDelete?.items?.slice(0, 2).map((item, index) => (
+                <div key={index} className="flex items-center justify-between text-sm">
+                  <span className="text-gray-700">{item.quantity}x {item.name}</span>
+                  <span className="font-medium text-red-600">₹{item.price * item.quantity}</span>
+                </div>
+              ))}
+              {orderToDelete?.items?.length > 2 && (
+                <div className="text-sm text-gray-500 text-center">
+                  +{orderToDelete.items.length - 2} more items
+                </div>
+              )}
+            </div>
+            <div className="mt-3 pt-3 border-t border-red-100">
+              <div className="flex items-center justify-between">
+                <span className="font-medium text-gray-800">Total Amount:</span>
+                <span className="text-lg font-bold text-red-600">₹{orderToDelete?.total}</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="mb-4 p-3 bg-amber-50 rounded-xl border border-amber-100">
+            <div className="flex items-start gap-2">
+              <AlertCircle size={16} className="text-amber-600 mt-0.5" />
+              <p className="text-sm text-amber-700">
+                This action cannot be undone. The order will be permanently deleted from the system.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between">
+            <button
+              onClick={() => {
+                setShowDeleteConfirm(false)
+                setOrderToDelete(null)
+              }}
+              className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-xl transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={deleteParcelOrder}
+              disabled={loading}
+              className="px-5 py-2.5 bg-red-600 text-white rounded-xl font-medium hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            >
+              {loading ? (
+                <Loader2 size={16} className="animate-spin" />
+              ) : (
+                <>
+                  <Trash2 size={16} />
+                  <span>Delete Order</span>
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+
+  const renderMenuItemCard = (item) => {
+    const inCart = selectedItems.find(i => i.id === item.id)
+    
+    return (
+      <div
+        key={item.id}
+        className="bg-white rounded-xl border border-gray-200 hover:border-emerald-300 transition-colors overflow-hidden group"
+      >
+        <div className="p-4">
+          <div className="flex justify-between items-start mb-3">
+            <div className="flex-1">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-2xl">{item.emoji}</span>
+                {item.popular && (
+                  <span className="bg-emerald-50 text-emerald-700 text-xs px-2 py-1 rounded-full font-medium border border-emerald-100">
+                    Popular
+                  </span>
+                )}
+              </div>
+              <h3 className="font-semibold text-gray-900 text-base mb-1 group-hover:text-emerald-700 transition-colors">{item.name}</h3>
+              <div className="flex items-center gap-2 text-sm text-gray-500">
+                <Clock size={14} className="text-emerald-600" />
+                <span>{item.preparationTime} min</span>
+                {item.spicy && <span className="text-red-500">🌶️</span>}
+              </div>
+            </div>
+            <div className="text-right">
+              <div className="font-bold text-emerald-600 text-lg">₹{item.price}</div>
+            </div>
+          </div>
+
+          {inCart ? (
+            <div className="flex items-center justify-between bg-emerald-50 rounded-xl p-1 border border-emerald-100">
+              <button
+                onClick={() => updateQuantity(item.id, inCart.quantity - 1)}
+                className="w-8 h-8 bg-white rounded-lg flex items-center justify-center hover:bg-gray-50 transition-colors border border-emerald-200"
+              >
+                <Minus size={14} className="text-emerald-600" />
+              </button>
+              <div className="flex flex-col items-center">
+                <span className="font-bold text-emerald-700">{inCart.quantity}</span>
+                <span className="text-xs text-emerald-600 font-medium">in cart</span>
+              </div>
+              <button
+                onClick={() => updateQuantity(item.id, inCart.quantity + 1)}
+                className="w-8 h-8 bg-emerald-600 rounded-lg flex items-center justify-center hover:bg-emerald-700 transition-colors"
+              >
+                <Plus size={14} className="text-white" />
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => addToOrder(item)}
+              className="w-full py-2.5 bg-emerald-50 text-emerald-700 rounded-xl font-medium hover:bg-emerald-100 transition-colors border border-emerald-200 flex items-center justify-center gap-2 group-hover:bg-emerald-100 group-hover:border-emerald-300"
+            >
+              <Plus size={16} />
+              <span>Add to Order</span>
+            </button>
+          )}
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen mt-14 bg-gradient-to-br from-emerald-50/50 to-gray-100">
       {/* App Header */}
@@ -752,6 +951,16 @@ const ParcelPage = () => {
         </div>
       </div>
 
+      {/* Printer Status Component */}
+      <div className="max-w-7xl mx-auto px-4 py-2">
+        <PrinterStatus
+          connected={globalBluetoothConnection.connected}
+          onConnect={connectBluetooth}
+          onDisconnect={disconnectBluetooth}
+          isPrinting={isPrinting || isConnecting}
+        />
+      </div>
+
       {/* Toasts */}
       {isOrderPlaced && (
         <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50">
@@ -759,9 +968,12 @@ const ParcelPage = () => {
             <div className="w-8 h-8 bg-emerald-100 rounded-lg flex items-center justify-center">
               <CheckCircle className="text-emerald-600" size={16} />
             </div>
-            <div>
-              <p className="font-medium text-gray-900">Parcel order sent to kitchen!</p>
-              <p className="text-xs text-gray-500">Kitchen will prepare your order</p>
+            <div className="flex items-center gap-3">
+              <div>
+                <p className="font-medium text-gray-900">Parcel order sent to kitchen!</p>
+                <p className="text-xs text-gray-500">Kitchen will prepare your order</p>
+              </div>
+              <Printer size={16} className="text-emerald-600" />
             </div>
           </div>
         </div>
@@ -815,10 +1027,9 @@ const ParcelPage = () => {
               </div>
             </div>
 
-            {/* Category Tabs - Updated with "All" */}
+            {/* Category Tabs */}
             <div className="px-4 pb-2 overflow-x-auto">
               <div className="flex gap-1">
-                {/* All Category Button */}
                 <button
                   onClick={() => setActiveCategory('all')}
                   className={`px-3 py-2 text-sm font-medium rounded-xl whitespace-nowrap transition-colors ${
@@ -830,7 +1041,6 @@ const ParcelPage = () => {
                   All
                 </button>
                 
-                {/* Other Categories */}
                 {Object.keys(menuItems).map(category => (
                   <button
                     key={category}
@@ -932,6 +1142,20 @@ const ParcelPage = () => {
                             </div>
                             
                             <div className="flex items-center gap-2">
+                              {/* Delete Order Button (only show if not sent to bill) */}
+                              {order.parcelStatus !== 'sent_to_bill' && (
+                                <button
+                                  onClick={() => {
+                                    setOrderToDelete(order)
+                                    setShowDeleteConfirm(true)
+                                  }}
+                                  className="px-2 py-1 bg-red-50 text-red-600 text-xs font-medium rounded-lg hover:bg-red-100 transition-colors flex items-center gap-1"
+                                  title="Delete Order"
+                                >
+                                  <Trash2 size={12} />
+                                </button>
+                              )}
+                              
                               {order.parcelStatus === 'preparing' && (
                                 <button
                                   onClick={() => {
@@ -1034,6 +1258,7 @@ const ParcelPage = () => {
                       </div>
                       <div>
                         <p className="font-semibold text-gray-900">₹{totalAmount}</p>
+                        <p className="text-xs text-gray-500">{totalItems} item{totalItems !== 1 ? 's' : ''}</p>
                       </div>
                       <button
                         onClick={() => setShowOrderSummary(true)}
@@ -1071,6 +1296,7 @@ const ParcelPage = () => {
       {showOrderSummary && renderOrderSummaryModal()}
       {showParcelReadyModal && renderParcelReadyModal()}
       {showSendToBillModal && renderSendToBillModal()}
+      {showDeleteConfirm && renderDeleteConfirmModal()}
 
       <style jsx>{`
         @keyframes slideDown {

@@ -36,12 +36,16 @@ import {
   AlertTriangle,
   Menu,
   Grid,
-  LayoutDashboard
+  LayoutDashboard,
+  Printer
 } from 'lucide-react'
+
+// Import the printer service
+import { printerService, globalBluetoothConnection } from '../Components/printorder'
 
 const Captain = () => {
   const navigate = useNavigate()
-  const [activeCategory, setActiveCategory] = useState('all') // Changed to 'all' as default
+  const [activeCategory, setActiveCategory] = useState('all')
   const [selectedItems, setSelectedItems] = useState([])
   const [selectedTable, setSelectedTable] = useState(null)
   const [customerNotes, setCustomerNotes] = useState('')
@@ -64,7 +68,8 @@ const Captain = () => {
   const [tableGroups, setTableGroups] = useState({})
   const [error, setError] = useState(null)
   const [isInitializing, setIsInitializing] = useState(true)
-  const [viewMode, setViewMode] = useState('grid') // 'grid' or 'list'
+  const [viewMode, setViewMode] = useState('grid')
+  const [isPrinting, setIsPrinting] = useState(false) // New state for printing
 
   // Updated floor configuration
   const floorConfig = [
@@ -503,6 +508,52 @@ const Captain = () => {
     }
   }
 
+  // NEW FUNCTION: Print order to thermal printer
+  const printOrderToPrinter = async () => {
+    if (!selectedTable || selectedItems.length === 0) {
+      setError('No order to print')
+      return false
+    }
+
+    setIsPrinting(true)
+    setError(null)
+
+    try {
+      const orderData = {
+        items: selectedItems.map(item => ({
+          name: item.name,
+          quantity: item.quantity,
+          price: item.price,
+          specialInstructions: item.specialInstructions || customerNotes
+        })),
+        total: totalAmount
+      }
+
+      const orderNumber = Math.floor(1000 + Math.random() * 9000)
+
+      // Print the order using the printer service
+      const success = await printerService.printOrderReceipt(
+        orderData,
+        selectedTable.displayName,
+        orderNumber.toString(),
+        {
+          onPrintStart: () => console.log('Starting to print order...'),
+          onPrintComplete: () => console.log('Order printed successfully'),
+          onPrintError: (error) => console.error('Print error:', error)
+        }
+      )
+
+      setIsPrinting(false)
+      return success ? orderNumber : Math.floor(1000 + Math.random() * 9000)
+
+    } catch (error) {
+      console.error('Error printing order:', error)
+      setIsPrinting(false)
+      setError('Failed to print order')
+      return Math.floor(1000 + Math.random() * 9000)
+    }
+  }
+
   const submitOrder = async () => {
     if (!selectedTable || selectedItems.length === 0) {
       setError('Select table and items')
@@ -513,29 +564,36 @@ const Captain = () => {
     setLoading(true)
     setError(null)
 
-    const orderData = {
-      tableId: selectedTable.id,
-      tableNumber: selectedTable.displayName,
-      floor: selectedTable.floor,
-      items: selectedItems.map(item => ({
-        ...item,
-        status: 'pending',
-        kitchenStatus: 'pending'
-      })),
-      status: 'active',
-      createdAt: new Date().toISOString(),
-      customerNotes: customerNotes,
-      total: totalAmount,
-      orderNumber: Math.floor(1000 + Math.random() * 9000),
-      captain: 'Captain',
-      isNew: true,
-      joinedGroup: tables[selectedTable.id]?.joinedGroup || null
-    }
-
     try {
+      // FIRST: Print the order to thermal printer
+      const printedOrderNumber = await printOrderToPrinter()
+      
+      // Create order data with the printed order number
+      const orderData = {
+        tableId: selectedTable.id,
+        tableNumber: selectedTable.displayName,
+        floor: selectedTable.floor,
+        items: selectedItems.map(item => ({
+          ...item,
+          status: 'pending',
+          kitchenStatus: 'pending'
+        })),
+        status: 'active',
+        createdAt: new Date().toISOString(),
+        customerNotes: customerNotes,
+        total: totalAmount,
+        orderNumber: printedOrderNumber,
+        captain: 'Captain',
+        isNew: true,
+        joinedGroup: tables[selectedTable.id]?.joinedGroup || null,
+        printedAt: new Date().toISOString() // Add timestamp for printing
+      }
+
+      // Save order to Firebase
       const ordersRef = ref(database, 'orders')
       const newOrderRef = await push(ordersRef, orderData)
 
+      // Update table status
       const tableRef = ref(database, `tables/${selectedTable.id}`)
       await update(tableRef, {
         status: 'occupied',
@@ -543,6 +601,7 @@ const Captain = () => {
         lastOrderAt: new Date().toISOString()
       })
 
+      // Send notification to kitchen
       const notificationsRef = ref(database, 'notifications')
       await push(notificationsRef, {
         type: 'new_order',
@@ -554,6 +613,7 @@ const Captain = () => {
         read: false
       })
 
+      // Show success message
       setIsOrderPlaced(true)
       setShowOrderSummary(false)
       clearCurrentOrder()
@@ -846,19 +906,26 @@ const Captain = () => {
               </button>
               <button
                 onClick={submitOrder}
-                disabled={loading}
+                disabled={loading || isPrinting}
                 className="px-5 py-2.5 bg-emerald-600 text-white rounded-xl font-medium hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
               >
-                {loading ? (
-                  <Loader2 size={16} className="animate-spin" />
+                {(loading || isPrinting) ? (
+                  <>
+                    <Loader2 size={16} className="animate-spin" />
+                    <span>{isPrinting ? 'Printing...' : 'Sending...'}</span>
+                  </>
                 ) : (
                   <>
-                    <Send size={16} />
-                    <span>Send Order</span>
+                    <Printer size={16} />
+                    <span>Print & Send Order</span>
                   </>
                 )}
               </button>
             </div>
+          </div>
+          
+          <div className="text-xs text-gray-500 text-center">
+            Order will be printed on thermal printer and sent to kitchen
           </div>
         </div>
       </div>
@@ -1480,8 +1547,8 @@ const Captain = () => {
                     onClick={() => setShowOrderSummary(true)}
                     className="px-4 py-2 bg-emerald-600 text-white rounded-xl font-medium hover:bg-emerald-700 transition-colors flex items-center gap-2"
                   >
-                    <Send size={16} />
-                    <span>Review</span>
+                    <Printer size={16} />
+                    <span>Review & Print</span>
                   </button>
                 </>
               ) : (
@@ -1646,8 +1713,8 @@ const Captain = () => {
               <CheckCircle className="text-emerald-600" size={16} />
             </div>
             <div>
-              <p className="font-medium text-gray-900">Order sent!</p>
-              <p className="text-xs text-gray-500">Table {selectedTable?.displayName}</p>
+              <p className="font-medium text-gray-900">Order sent to kitchen!</p>
+              <p className="text-xs text-gray-500">Table {selectedTable?.displayName} • Printed successfully</p>
             </div>
           </div>
         </div>
