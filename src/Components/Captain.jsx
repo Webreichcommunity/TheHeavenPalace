@@ -37,7 +37,8 @@ import {
   Menu,
   Grid,
   LayoutDashboard,
-  Printer
+  Printer,
+  Edit
 } from 'lucide-react'
 
 // Import the printer service
@@ -69,7 +70,9 @@ const Captain = () => {
   const [error, setError] = useState(null)
   const [isInitializing, setIsInitializing] = useState(true)
   const [viewMode, setViewMode] = useState('grid')
-  const [isPrinting, setIsPrinting] = useState(false) // New state for printing
+  const [isPrinting, setIsPrinting] = useState(false)
+  const [showEditOrderModal, setShowEditOrderModal] = useState(false)
+  const [orderToEdit, setOrderToEdit] = useState(null)
 
   // Updated floor configuration
   const floorConfig = [
@@ -98,15 +101,15 @@ const Captain = () => {
       label: 'Top Floor',
       color: 'text-blue-600',
       tables: [
-        { number: 'T1', displayName: 'TT1' },
-        { number: 'T2', displayName: 'TT2' },
-        { number: 'T3', displayName: 'TT3' },
-        { number: 'T4', displayName: 'TT4' },
-        { number: 'T5', displayName: 'TT5' },
-        { number: 'T6', displayName: 'TT6' },
-        { number: 'T7', displayName: 'TT7' },
-        { number: 'T8', displayName: 'TT8' },
-        { number: 'T9', displayName: 'TT9' }
+        { number: 'T7', displayName: 'T7' },
+        { number: 'T8', displayName: 'T8' },
+        { number: 'T9', displayName: 'T9' },
+        { number: 'T10', displayName: 'T10' },
+        { number: 'T11', displayName: 'T11' },
+        { number: 'T12', displayName: 'T12' },
+        { number: 'T13', displayName: 'T13' },
+        { number: 'T14', displayName: 'T14' },
+        { number: 'T15', displayName: 'T15' }
       ]
     }
   ]
@@ -217,6 +220,32 @@ const Captain = () => {
     }
   }, [])
 
+  // Helper function to get active orders count for a table
+  const getTableActiveOrdersCount = useCallback((tableId) => {
+    if (!tableId || !activeOrders) return 0
+    return Object.values(activeOrders).filter(order =>
+      order.tableId === tableId && order.status === 'active'
+    ).length
+  }, [activeOrders])
+
+  // Get accurate table status
+  const getTableStatus = useCallback((tableNumber, floorId) => {
+    const tableId = getTableId(tableNumber, floorId)
+    const table = tables[tableId]
+    
+    if (!table) return 'available'
+    
+    const activeOrdersCount = getTableActiveOrdersCount(tableId)
+    
+    // If no active orders and table is not joined, it should be available
+    if (activeOrdersCount === 0 && !table.isJoined) {
+      return 'available'
+    }
+    
+    // If there are active orders or table is joined, it's occupied
+    return 'occupied'
+  }, [tables, getTableId, getTableActiveOrdersCount])
+
   const getFloorStats = useCallback((floorTables) => {
     if (!floorTables || floorTables.length === 0) {
       return { totalTables: 0, occupiedTables: 0, activeOrdersCount: 0, totalRevenue: 0 }
@@ -226,15 +255,15 @@ const Captain = () => {
       getTableId(table.number, floorTables[0]?.floorId || '1')
     )
 
-    const occupiedTables = floorTableIds.filter(tableId =>
-      tables[tableId]?.status === 'occupied'
-    ).length
+    const occupiedTables = floorTableIds.filter(tableId => {
+      const tableNumber = getDisplayTableNumber(tableId)
+      const floorId = tableId.includes('table-3-') ? '3' : tableId.includes('table-1-') ? '1' : '2'
+      const status = getTableStatus(tableNumber, floorId)
+      return status === 'occupied'
+    }).length
 
     const activeOrdersCount = floorTableIds.reduce((count, tableId) => {
-      const tableOrders = Object.values(activeOrders).filter(order =>
-        order.tableId === tableId && order.status === 'active'
-      )
-      return count + tableOrders.length
+      return count + getTableActiveOrdersCount(tableId)
     }, 0)
 
     const totalRevenue = floorTableIds.reduce((sum, tableId) => {
@@ -250,12 +279,12 @@ const Captain = () => {
       activeOrdersCount,
       totalRevenue
     }
-  }, [tables, activeOrders, getTableId])
+  }, [tables, activeOrders, getTableId, getDisplayTableNumber, getTableStatus, getTableActiveOrdersCount])
 
   // Updated filteredMenuItems to handle 'all' category search
   const filteredMenuItems = React.useMemo(() => {
     const searchLower = searchTerm.toLowerCase().trim()
-    
+
     // If no search term, return all items grouped by category
     if (!searchLower) {
       // If 'all' category is selected, return all items grouped
@@ -287,14 +316,9 @@ const Captain = () => {
       item.name.toLowerCase().includes(searchLower) ||
       (item.description && item.description.toLowerCase().includes(searchLower))
     )
-    
+
     return filtered.length > 0 ? { [activeCategory]: filtered } : {}
   }, [menuItems, searchTerm, activeCategory])
-
-  const getTableStatus = useCallback((tableNumber, floorId) => {
-    const tableId = getTableId(tableNumber, floorId)
-    return tables[tableId]?.status || 'available'
-  }, [tables, getTableId])
 
   const getTableOrders = useCallback((tableId) => {
     return Object.entries(activeOrders)
@@ -303,8 +327,8 @@ const Captain = () => {
   }, [activeOrders])
 
   const getActiveOrdersCount = useCallback((tableId) => {
-    return getTableOrders(tableId).length
-  }, [getTableOrders])
+    return getTableActiveOrdersCount(tableId)
+  }, [getTableActiveOrdersCount])
 
   const getTotalTableAmount = useCallback((tableId) => {
     const orders = getTableOrders(tableId)
@@ -360,8 +384,11 @@ const Captain = () => {
 
       selectedTablesForJoin.forEach(tableId => {
         updates[`tables/${tableId}/joinedGroup`] = joinedGroupId
-        updates[`tables/${tableId}/status`] = 'occupied'
         updates[`tables/${tableId}/isJoined`] = true
+        
+        // Only mark as occupied if there are active orders
+        const hasActiveOrders = getTableActiveOrdersCount(tableId) > 0
+        updates[`tables/${tableId}/status`] = hasActiveOrders ? 'occupied' : 'available'
       })
 
       updates[`tableGroups/${joinedGroupId}`] = {
@@ -406,12 +433,9 @@ const Captain = () => {
         updates[`tables/${tId}/joinedGroup`] = null
         updates[`tables/${tId}/isJoined`] = false
 
-        const hasActiveOrders = Object.values(activeOrders).some(
-          order => order.tableId === tId && order.status === 'active'
-        )
-        if (!hasActiveOrders) {
-          updates[`tables/${tId}/status`] = 'available'
-        }
+        // Check if this specific table has active orders
+        const hasActiveOrders = getTableActiveOrdersCount(tId) > 0
+        updates[`tables/${tId}/status`] = hasActiveOrders ? 'occupied' : 'available'
       })
 
       updates[`tableGroups/${table.joinedGroup}`] = null
@@ -460,6 +484,50 @@ const Captain = () => {
     setCustomerNotes('')
   }
 
+  // NEW: Function to edit individual items in an existing order
+  const editOrderItems = async (orderId, updatedItems) => {
+    setLoading(true)
+    setError(null)
+
+    try {
+      const orderRef = ref(database, `orders/${orderId}`)
+      const order = activeOrders[orderId]
+      
+      if (!order) throw new Error('Order not found')
+
+      // Calculate new total
+      const newTotal = updatedItems.reduce((sum, item) => sum + (item.price * item.quantity), 0)
+
+      await update(orderRef, {
+        items: updatedItems,
+        total: newTotal,
+        updatedAt: new Date().toISOString(),
+        updatedBy: 'Captain'
+      })
+
+      // Send notification to kitchen about the update
+      const notificationsRef = ref(database, 'notifications')
+      await push(notificationsRef, {
+        type: 'order_updated',
+        message: `Order #${order.orderNumber} updated`,
+        tableNumber: order.tableNumber,
+        orderId,
+        createdAt: new Date().toISOString(),
+        read: false
+      })
+
+      setShowEditOrderModal(false)
+      setOrderToEdit(null)
+
+    } catch (error) {
+      console.error('Error updating order:', error)
+      setError('Failed to update order')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // UPDATED: Cancel order function with proper table cleanup
   const cancelOrder = async (orderId) => {
     if (!window.confirm('Cancel this order?')) return
 
@@ -472,21 +540,33 @@ const Captain = () => {
 
       if (!order) throw new Error('Order not found')
 
-      await update(orderRef, {
-        status: 'cancelled',
-        cancelledAt: new Date().toISOString(),
-        cancelledBy: 'Captain'
-      })
+      // Delete the order from Firebase
+      await remove(orderRef)
 
-      const tableOrders = Object.values(activeOrders).filter(
-        o => o.tableId === order.tableId && o.status === 'active'
+      // Get the table ID from the order
+      const tableId = order.tableId
+
+      // Check if table has any other active orders
+      const hasOtherActiveOrders = Object.values(activeOrders).some(
+        o => o.tableId === tableId && 
+             o.status === 'active' && 
+             o.id !== orderId
       )
 
-      if (tableOrders.length === 0 && !tables[order.tableId]?.isJoined) {
-        const tableRef = ref(database, `tables/${order.tableId}`)
-        await update(tableRef, { status: 'available' })
+      // If no other active orders and table is not joined, delete table entry
+      if (!hasOtherActiveOrders && !tables[tableId]?.isJoined) {
+        const tableRef = ref(database, `tables/${tableId}`)
+        await remove(tableRef)
+      } else if (!hasOtherActiveOrders && tables[tableId]?.isJoined) {
+        // If joined but no active orders, update status
+        const tableRef = ref(database, `tables/${tableId}`)
+        await update(tableRef, {
+          status: 'available',
+          lastOrderAt: null
+        })
       }
 
+      // Send notification
       const notificationsRef = ref(database, 'notifications')
       await push(notificationsRef, {
         type: 'order_cancelled',
@@ -567,7 +647,7 @@ const Captain = () => {
     try {
       // FIRST: Print the order to thermal printer
       const printedOrderNumber = await printOrderToPrinter()
-      
+
       // Create order data with the printed order number
       const orderData = {
         tableId: selectedTable.id,
@@ -586,19 +666,21 @@ const Captain = () => {
         captain: 'Captain',
         isNew: true,
         joinedGroup: tables[selectedTable.id]?.joinedGroup || null,
-        printedAt: new Date().toISOString() // Add timestamp for printing
+        printedAt: new Date().toISOString()
       }
 
       // Save order to Firebase
       const ordersRef = ref(database, 'orders')
       const newOrderRef = await push(ordersRef, orderData)
 
-      // Update table status
+      // Create or update table entry
       const tableRef = ref(database, `tables/${selectedTable.id}`)
       await update(tableRef, {
         status: 'occupied',
         floor: selectedTable.floor,
-        lastOrderAt: new Date().toISOString()
+        lastOrderAt: new Date().toISOString(),
+        isJoined: tables[selectedTable.id]?.isJoined || false,
+        joinedGroup: tables[selectedTable.id]?.joinedGroup || null
       })
 
       // Send notification to kitchen
@@ -660,6 +742,7 @@ const Captain = () => {
       const newBillRef = await push(billsRef, finalBill)
       const billId = newBillRef.key
 
+      // Update all orders to closed
       for (const [orderId] of tableOrders) {
         const orderRef = ref(database, `orders/${orderId}`)
         await update(orderRef, {
@@ -669,19 +752,11 @@ const Captain = () => {
         })
       }
 
+      // Delete table entry since order is completed
       const tableRef = ref(database, `tables/${selectedTable.id}`)
-      const tableData = {
-        status: 'available',
-        currentOrder: null,
-        currentBill: {
-          id: billId,
-          billNumber: finalBill.billNumber,
-          finalTotal: finalBill.finalTotal,
-          createdAt: finalBill.completedAt
-        },
-        lastCompletedAt: new Date().toISOString()
-      }
+      await remove(tableRef)
 
+      // If table was joined, clean up all joined tables
       if (tables[selectedTable.id]?.isJoined) {
         const joinedGroupId = tables[selectedTable.id].joinedGroup
 
@@ -690,17 +765,14 @@ const Captain = () => {
           .map(([id]) => id)
 
         for (const groupTableId of groupTables) {
-          await update(ref(database, `tables/${groupTableId}`), {
-            joinedGroup: null,
-            isJoined: false,
-            status: 'available'
-          })
+          const hasActiveOrders = getTableActiveOrdersCount(groupTableId) > 0
+          if (!hasActiveOrders) {
+            await remove(ref(database, `tables/${groupTableId}`))
+          }
         }
 
         await update(ref(database, `tableGroups/${joinedGroupId}`), null)
       }
-
-      await update(tableRef, tableData)
 
       setShowBillSentToast(true)
       setShowCompleteOrderModal(false)
@@ -769,7 +841,7 @@ const Captain = () => {
   // Helper function to render menu item card
   const renderMenuItemCard = (item) => {
     const inCart = selectedItems.find(i => i.id === item.id)
-    
+
     return (
       <div
         key={item.id}
@@ -832,6 +904,146 @@ const Captain = () => {
               <span>Add to Order</span>
             </button>
           )}
+        </div>
+      </div>
+    )
+  }
+
+  // NEW: Render Edit Order Modal
+  const renderEditOrderModal = () => {
+    if (!orderToEdit) return null
+
+    const [editItems, setEditItems] = useState(orderToEdit.items || [])
+    const [editNotes, setEditNotes] = useState(orderToEdit.customerNotes || '')
+
+    const handleEditItemQuantity = (itemId, newQuantity) => {
+      setEditItems(items => 
+        items.map(item => 
+          item.id === itemId ? { ...item, quantity: newQuantity } : item
+        ).filter(item => item.quantity > 0)
+      )
+    }
+
+    const handleRemoveEditItem = (itemId) => {
+      setEditItems(items => items.filter(item => item.id !== itemId))
+    }
+
+    const calculateEditTotal = () => {
+      return editItems.reduce((sum, item) => sum + (item.price * item.quantity), 0)
+    }
+
+    return (
+      <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div className="bg-white/95 backdrop-blur-sm rounded-2xl w-full max-w-md border border-gray-200/80 shadow-2xl">
+          <div className="p-5 border-b border-gray-100 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center">
+                <Edit size={20} className="text-blue-600" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-gray-800">Edit Order #{orderToEdit.orderNumber}</h3>
+                <p className="text-sm text-gray-500">{selectedTable?.displayName}</p>
+              </div>
+            </div>
+            <button
+              onClick={() => {
+                setShowEditOrderModal(false)
+                setOrderToEdit(null)
+              }}
+              className="w-8 h-8 hover:bg-gray-100 rounded-xl flex items-center justify-center transition-colors"
+            >
+              <X size={18} />
+            </button>
+          </div>
+
+          <div className="p-5 max-h-64 overflow-y-auto">
+            <div className="space-y-3">
+              {editItems.map((item, index) => (
+                <div key={`${item.id}-${index}`} className="flex items-center justify-between p-3 bg-white border border-gray-100 rounded-xl">
+                  <div className="flex items-center gap-3">
+                    <span className="text-xl">{item.emoji}</span>
+                    <div>
+                      <p className="font-medium text-gray-800">{item.name}</p>
+                      <p className="text-sm text-gray-500">₹{item.price} × {item.quantity}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => handleEditItemQuantity(item.id, Math.max(0.5, item.quantity - 1))}
+                        className="w-6 h-6 bg-gray-100 rounded-lg flex items-center justify-center"
+                      >
+                        <Minus size={12} />
+                      </button>
+                      <span className="font-medium">{item.quantity}</span>
+                      <button
+                        onClick={() => handleEditItemQuantity(item.id, item.quantity + 1)}
+                        className="w-6 h-6 bg-gray-100 rounded-lg flex items-center justify-center"
+                      >
+                        <Plus size={12} />
+                      </button>
+                    </div>
+                    <span className="font-semibold text-emerald-600">₹{item.price * item.quantity}</span>
+                    <button
+                      onClick={() => handleRemoveEditItem(item.id)}
+                      className="w-7 h-7 bg-red-50 hover:bg-red-100 rounded-lg flex items-center justify-center transition-colors"
+                    >
+                      <Trash2 size={14} className="text-red-500" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+              
+              {editItems.length === 0 && (
+                <div className="text-center py-8">
+                  <ShoppingCart className="mx-auto text-gray-300 mb-2" size={32} />
+                  <p className="text-gray-500">All items removed</p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="p-5 border-t border-gray-100 space-y-3">
+            <textarea
+              value={editNotes}
+              onChange={(e) => setEditNotes(e.target.value)}
+              placeholder="Update special instructions..."
+              className="w-full p-3 text-sm bg-white border border-gray-200 rounded-xl focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 resize-none"
+              rows="2"
+            />
+
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-500">New Total</p>
+                <p className="text-2xl font-bold text-emerald-600">₹{calculateEditTotal()}</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    setShowEditOrderModal(false)
+                    setOrderToEdit(null)
+                  }}
+                  className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-xl transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => editOrderItems(orderToEdit.id, editItems)}
+                  disabled={loading || editItems.length === 0}
+                  className="px-5 py-2.5 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                >
+                  {loading ? (
+                    <Loader2 size={16} className="animate-spin" />
+                  ) : (
+                    <>
+                      <CheckCircle size={16} />
+                      <span>Update Order</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     )
@@ -923,7 +1135,7 @@ const Captain = () => {
               </button>
             </div>
           </div>
-          
+
           <div className="text-xs text-gray-500 text-center">
             Order will be printed on thermal printer and sent to kitchen
           </div>
@@ -1033,7 +1245,8 @@ const Captain = () => {
               floor.tables.map(table => {
                 const tableId = getTableId(table.number, floor.id)
                 const isSelected = selectedTablesForJoin.includes(tableId)
-                const isOccupied = tables[tableId]?.status === 'occupied'
+                const status = getTableStatus(table.number, floor.id)
+                const isOccupied = status === 'occupied'
 
                 return (
                   <button
@@ -1215,7 +1428,7 @@ const Captain = () => {
                     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
                       {floor.tables.map(table => {
                         const tableId = getTableId(table.number, floor.id)
-                        const status = tables[tableId]?.status || 'available'
+                        const status = getTableStatus(table.number, floor.id)
                         const isOccupied = status === 'occupied'
                         const ordersCount = getActiveOrdersCount(tableId)
                         const isJoined = tables[tableId]?.isJoined
@@ -1293,7 +1506,7 @@ const Captain = () => {
           {floorConfig.flatMap(floor =>
             floor.tables.map(table => {
               const tableId = getTableId(table.number, floor.id)
-              const status = tables[tableId]?.status || 'available'
+              const status = getTableStatus(table.number, floor.id)
               const isOccupied = status === 'occupied'
               const ordersCount = getActiveOrdersCount(tableId)
 
@@ -1428,7 +1641,7 @@ const Captain = () => {
             >
               All
             </button>
-            
+
             {/* Other Categories */}
             {Object.keys(menuItems).map(category => (
               <button
@@ -1507,15 +1720,27 @@ const Captain = () => {
                         {new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </span>
                     </div>
-                    <button
-                      onClick={() => {
-                        setOrderToCancel(order)
-                        setShowCancelOrderModal(true)
-                      }}
-                      className="w-5 h-5 bg-red-50 hover:bg-red-100 rounded-lg flex items-center justify-center transition-colors"
-                    >
-                      <X size={12} className="text-red-500" />
-                    </button>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => {
+                          setOrderToEdit(order)
+                          setShowEditOrderModal(true)
+                        }}
+                        className="w-5 h-5 bg-blue-50 hover:bg-blue-100 rounded-lg flex items-center justify-center transition-colors"
+                        title="Edit order"
+                      >
+                        <Edit size={12} className="text-orange-500" />
+                      </button>
+                      <button
+                        onClick={() => {
+                          setOrderToCancel(order)
+                          setShowCancelOrderModal(true)
+                        }}
+                        className="w-5 h-5 bg-red-50 hover:bg-red-100 rounded-lg flex items-center justify-center transition-colors"
+                      >
+                        <X size={12} className="text-red-500" />
+                      </button>
+                    </div>
                   </div>
                   <div className="text-sm text-gray-600">
                     {order.items?.length || 0} items • ₹{order.total}
@@ -1601,15 +1826,27 @@ const Captain = () => {
                     <div className="flex justify-between items-center mb-2">
                       <div className="flex items-center gap-2">
                         <span className="font-semibold text-gray-900">#{order.orderNumber}</span>
-                        <button
-                          onClick={() => {
-                            setOrderToCancel(order)
-                            setShowCancelOrderModal(true)
-                          }}
-                          className="w-5 h-5 bg-red-50 hover:bg-red-100 rounded-lg flex items-center justify-center transition-colors"
-                        >
-                          <X size={12} className="text-red-500" />
-                        </button>
+                        <div className="flex items-center gap-1">
+                          {/* <button
+                            onClick={() => {
+                              setOrderToEdit(order)
+                              setShowEditOrderModal(true)
+                            }}
+                            className="w-5 h-5 bg-blue-50 hover:bg-blue-100 rounded-lg flex items-center justify-center transition-colors"
+                            title="Edit order"
+                          >
+                            <Edit size={12} className="text-blue-500" />
+                          </button> */}
+                          <button
+                            onClick={() => {
+                              setOrderToCancel(order)
+                              setShowCancelOrderModal(true)
+                            }}
+                            className="w-5 h-5 bg-red-50 hover:bg-red-100 rounded-lg flex items-center justify-center transition-colors"
+                          >
+                            <X size={12} className="text-red-500" />
+                          </button>
+                        </div>
                       </div>
                       <div className="flex items-center gap-2">
                         <span className="text-sm text-gray-500">
@@ -1743,6 +1980,7 @@ const Captain = () => {
       {showOrderSummary && renderOrderSummaryModal()}
       {showCancelOrderModal && renderCancelOrderModal()}
       {showTableJoinModal && renderTableJoinModal()}
+      {showEditOrderModal && renderEditOrderModal()}
 
       <style jsx>{`
         @keyframes slideDown {
