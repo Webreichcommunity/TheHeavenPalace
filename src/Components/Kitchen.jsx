@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react'
 import { ref, update, onValue, off, push } from 'firebase/database'
 import { database } from '../Firebase/config'
-import { Clock, ChefHat, CheckCircle, Play, Bell, Flame, TrendingUp, AlertCircle } from 'lucide-react'
+import { Clock, ChefHat, CheckCircle, Play, Bell, Flame, TrendingUp, AlertCircle, Printer } from 'lucide-react'
+import { printerService } from '../Components/printorder'
 
 const Kitchen = () => {
   const [orders, setOrders] = useState({})
@@ -160,6 +161,32 @@ const Kitchen = () => {
     }
   }
 
+  // Print KOT (Kitchen Order Ticket)
+  const printKOT = async (order) => {
+    try {
+      const orderItems = order.items.map(item => ({
+        name: item.name,
+        quantity: item.quantity
+      }))
+
+      const tableDisplay = order.tableNumber || 'Parcel'
+      const orderNumber = order.orderNumber || order.id.slice(-4)
+
+      await printerService.printKOT(
+        orderItems,
+        tableDisplay,
+        orderNumber,
+        {
+          onPrintStart: () => console.log('Starting KOT print...'),
+          onPrintComplete: () => console.log('KOT printed successfully'),
+          onPrintError: (error) => console.error('KOT print error:', error)
+        }
+      )
+    } catch (error) {
+      console.error('Error printing KOT:', error)
+    }
+  }
+
   const stats = getKitchenStats()
   const filteredOrders = getFilteredOrders()
   const urgentOrdersCount = getUrgentOrders()
@@ -181,12 +208,6 @@ const Kitchen = () => {
             </div>
             
             <div className="flex items-center gap-4">
-              {urgentOrdersCount > 0 && (
-                <div className="px-3 py-1 bg-red-50 text-red-600 text-sm rounded-lg flex items-center gap-2">
-                  <AlertCircle size={16} />
-                  <span className="font-medium">{urgentOrdersCount} urgent</span>
-                </div>
-              )}
               <div className="text-right">
                 <div className="text-xs text-gray-500">Active orders</div>
                 <div className="text-lg font-bold text-gray-900">{stats.activeOrders}</div>
@@ -197,45 +218,6 @@ const Kitchen = () => {
       </div>
 
       <div className="max-w-7xl mx-auto p-4">
-        {/* Stats Overview */}
-        <div className="grid grid-cols-2 gap-3 mb-6">
-          <div className="bg-white rounded-xl border border-gray-200 p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-2xl font-bold text-yellow-600">{stats.pending}</div>
-                <div className="text-sm text-gray-500">Waiting</div>
-              </div>
-              <div className="w-10 h-10 bg-yellow-50 rounded-xl flex items-center justify-center">
-                <Clock size={20} className="text-yellow-600" />
-              </div>
-            </div>
-          </div>
-          
-          <div className="bg-white rounded-xl border border-gray-200 p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-2xl font-bold text-blue-600">{stats.preparing}</div>
-                <div className="text-sm text-gray-500">Cooking</div>
-              </div>
-              <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center">
-                <Flame size={20} className="text-blue-600" />
-              </div>
-            </div>
-          </div>
-          
-          {/* <div className="bg-white rounded-xl border border-gray-200 p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-2xl font-bold text-emerald-600">{stats.ready}</div>
-                <div className="text-sm text-gray-500">Ready</div>
-              </div>
-              <div className="w-10 h-10 bg-emerald-50 rounded-xl flex items-center justify-center">
-                <CheckCircle size={20} className="text-emerald-600" />
-              </div>
-            </div>
-          </div> */}
-        </div>
-
         {/* Orders Grid */}
         {filteredOrders.length > 0 ? (
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
@@ -243,7 +225,6 @@ const Kitchen = () => {
               const pendingItems = order.items?.filter(item => item.status === 'pending').length || 0
               const preparingItems = order.items?.filter(item => item.status === 'preparing').length || 0
               const readyItems = order.items?.filter(item => item.status === 'ready').length || 0
-              const progress = getOrderProgress(order)
               const isUrgent = pendingItems > 2
               
               return (
@@ -258,7 +239,7 @@ const Kitchen = () => {
                     <div className="flex items-center justify-between mb-3">
                       <div>
                         <div className="flex items-center gap-2 mb-1">
-                          <h3 className="text-lg font-semibold text-gray-900">Table {order.tableNumber}</h3>
+                          <h3 className="text-lg font-semibold text-gray-900">{order.tableNumber || 'Parcel'}</h3>
                           {isUrgent && (
                             <span className="px-2 py-1 bg-red-50 text-red-600 text-xs font-medium rounded-lg">
                               Urgent
@@ -267,47 +248,14 @@ const Kitchen = () => {
                         </div>
                         <p className="text-sm text-gray-500">Order #{order.orderNumber || orderId.slice(-4)}</p>
                       </div>
-                      <div className="text-right">
-                        <div className="text-sm text-gray-500">
-                          {new Date(order.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                        </div>
-                        <div className="text-lg font-bold text-gray-900">₹{order.total}</div>
-                      </div>
-                    </div>
-
-                    {/* Progress Bar */}
-                    <div className="mb-3">
-                      <div className="flex justify-between text-sm text-gray-600 mb-1">
-                        <span>Progress</span>
-                        <span className="font-medium">{progress}%</span>
-                      </div>
-                      <div className="w-full bg-gray-100 rounded-full h-2">
-                        <div 
-                          className="bg-emerald-600 h-2 rounded-full transition-all duration-300"
-                          style={{ width: `${progress}%` }}
-                        ></div>
-                      </div>
-                    </div>
-
-                    {/* Status Summary */}
-                    <div className="flex gap-3">
-                      <div className="text-center">
-                        <div className={`w-8 h-8 ${pendingItems > 0 ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-400'} rounded-lg flex items-center justify-center mx-auto mb-1`}>
-                          <span className="text-sm font-bold">{pendingItems}</span>
-                        </div>
-                        <span className="text-xs text-gray-500">Waiting</span>
-                      </div>
-                      <div className="text-center">
-                        <div className={`w-8 h-8 ${preparingItems > 0 ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-400'} rounded-lg flex items-center justify-center mx-auto mb-1`}>
-                          <span className="text-sm font-bold">{preparingItems}</span>
-                        </div>
-                        <span className="text-xs text-gray-500">Cooking</span>
-                      </div>
-                      <div className="text-center">
-                        <div className={`w-8 h-8 ${readyItems > 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-400'} rounded-lg flex items-center justify-center mx-auto mb-1`}>
-                          <span className="text-sm font-bold">{readyItems}</span>
-                        </div>
-                        <span className="text-xs text-gray-500">Ready</span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => printKOT(order)}
+                          className="px-3 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors flex items-center gap-2"
+                        >
+                          <Printer size={16} />
+                          <span className="text-sm">Print KOT</span>
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -318,8 +266,8 @@ const Kitchen = () => {
                       {order.items?.map((item, index) => (
                         <div 
                           key={item.id} 
-                          className={`p-3 rounded-lg border border-l-4 ${getStatusColor(item.status)} ${
-                            item.status === 'pending' ? 'bg-gray-50' :
+                          className={`p-3 rounded-lg border ${getStatusColor(item.status)} ${
+                            item.status === 'pending' ? 'bg-yellow-50' :
                             item.status === 'preparing' ? 'bg-blue-50' :
                             'bg-emerald-50'
                           }`}
@@ -331,8 +279,6 @@ const Kitchen = () => {
                                 <h4 className="font-medium text-gray-900">{item.name}</h4>
                                 <div className="flex items-center gap-2 text-sm text-gray-500">
                                   <span>{item.quantity}x</span>
-                                  <span>•</span>
-                                  <span>{item.preparationTime} min</span>
                                 </div>
                               </div>
                             </div>
@@ -378,19 +324,6 @@ const Kitchen = () => {
                       ))}
                     </div>
                   </div>
-
-                  {/* Quick Actions */}
-                  {pendingItems > 0 && (
-                    <div className="p-4 border-t border-gray-100 bg-gray-50">
-                      <button
-                        onClick={() => startAllItems(orderId)}
-                        className="w-full py-2.5 bg-gray-800 text-white rounded-lg font-medium hover:bg-gray-900 transition-colors flex items-center justify-center gap-2"
-                      >
-                        <Play size={16} />
-                        <span>Start All Items ({pendingItems})</span>
-                      </button>
-                    </div>
-                  )}
                 </div>
               )
             })}
@@ -407,19 +340,6 @@ const Kitchen = () => {
             </p>
           </div>
         )}
-
-        {/* Status Bar */}
-        <div className="mt-6 bg-white rounded-xl border border-gray-200 p-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
-              <span className="text-sm text-gray-600">Live updates enabled</span>
-            </div>
-            <div className="text-sm text-gray-500">
-              Last updated: {lastUpdated.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-            </div>
-          </div>
-        </div>
       </div>
 
       <style jsx>{`

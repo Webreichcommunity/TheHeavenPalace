@@ -38,7 +38,7 @@ const TableCard = ({ table, onSelect }) => {
       <div className="p-6">
         <div className="flex justify-between items-start mb-4">
           <div>
-            <h3 className="text-xl font-bold text-gray-900">{table.displayName}</h3>
+            <h3 className="text-xl font-bold text-gray-900">{table.displayName}shriyash</h3>
             <p className="text-gray-600 text-sm">Floor {table.floor}</p>
           </div>
           <span className={`px-3 py-1.5 rounded-full text-xs font-semibold ${getStatusColor(table.status)} text-white`}>

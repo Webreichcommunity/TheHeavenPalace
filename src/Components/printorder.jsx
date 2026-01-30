@@ -196,7 +196,6 @@ class PrinterService {
       ">
         <!-- HEADER -->
         <div style="text-align:center; padding-bottom:6px; border-bottom:1px solid #000;">
-         
           <div style="font-size:13px; margin-top:3px;">
             KITCHEN ORDER
           </div>
@@ -394,7 +393,202 @@ class PrinterService {
     }
   }
 
-  // Fallback print function for orders
+  // Print KOT (Kitchen Order Ticket) - simplified version
+  async printKOT(orderItems, tableDisplay, orderNumber, options = {}) {
+    const {
+      onPrintStart = null,
+      onPrintComplete = null,
+      onPrintError = null
+    } = options;
+
+    try {
+      if (onPrintStart) onPrintStart();
+
+      let connection;
+      if (globalBluetoothConnection.connected && globalBluetoothConnection.device?.gatt?.connected) {
+        connection = {
+          device: globalBluetoothConnection.device,
+          characteristic: globalBluetoothConnection.characteristic,
+        };
+      } else {
+        connection = await this.connectBluetooth();
+        if (!connection) {
+          // Fallback to browser print
+          this.fallbackPrintKOT(orderItems, tableDisplay, orderNumber);
+          return true;
+        }
+      }
+
+      // Generate simple KOT HTML
+      const html = `
+        <div style="
+          width:200px;
+          padding:6px 10px;
+          background:#fff;
+          font-family:Arial, Helvetica, sans-serif;
+          font-size:13px;
+          color:#000;
+          box-sizing:border-box;
+        ">
+          <!-- HEADER -->
+          <div style="text-align:center; padding-bottom:6px; border-bottom:1px solid #000;">
+            <div style="font-size:13px; margin-top:3px;">
+              KITCHEN ORDER TICKET
+            </div>
+          </div>
+
+          <!-- ORDER INFO -->
+          <div style="padding:6px 0;">
+            <div style="display:flex; justify-content:space-between;">
+              <span style="font-weight:bold;">Order #${orderNumber}</span>
+              <span style="font-weight:bold;">${tableDisplay}</span>
+            </div>
+            <div style="margin-top:2px;">
+              <span>${new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</span>
+            </div>
+          </div>
+
+          <!-- ITEMS LIST -->
+          <div style="border-top:1px solid #000; padding-top:8px;">
+            ${orderItems.map(item => `
+              <div style="
+                padding:4px 0;
+                border-bottom:1px dashed #ccc;
+                margin-bottom:4px;
+              ">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                  <span style="font-weight:bold; font-size:14px;">${this.escapeHtml(item.name)}</span>
+                  <span style="font-weight:bold; font-size:13px;">Qty: ${item.quantity}</span>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+
+          <!-- FOOTER -->
+          <div style="text-align:center; margin-top:12px; padding-top:8px; border-top:1px solid #000;">
+            <div style="font-size:11px;">
+              *** KITCHEN COPY ***
+            </div>
+          </div>
+        </div>
+      `
+
+      // Create printable element
+      const tempDiv = document.createElement('div');
+      tempDiv.id = `kot-print-temp-${Date.now()}`;
+      tempDiv.style.width = '200px';
+      tempDiv.style.padding = '12px';
+      tempDiv.style.background = '#fff';
+      tempDiv.style.fontFamily = 'Arial, sans-serif';
+      tempDiv.style.fontSize = '13px';
+      tempDiv.style.lineHeight = '1.3';
+      tempDiv.style.position = 'absolute';
+      tempDiv.style.left = '-9999px';
+      tempDiv.innerHTML = html;
+      document.body.appendChild(tempDiv);
+
+      // Convert to canvas
+      const html2canvas = await this.loadHtml2Canvas();
+      const canvas = await html2canvas(tempDiv, {
+        scale: 2,
+        backgroundColor: '#fff',
+        useCORS: true,
+        width: 230,
+      });
+
+      // Clean up
+      document.body.removeChild(tempDiv);
+
+      // Convert to ESC/POS
+      const escImage = this.canvasToEscPosRaster(canvas);
+
+      // Printer commands
+      const init = new Uint8Array([0x1B, 0x40]); // Initialize
+      const alignCenter = new Uint8Array([0x1B, 0x61, 0x01]); // Center alignment
+      const cutPaper = new Uint8Array([0x0A, 0x0A, 0x1D, 0x56, 0x00]); // Cut paper
+
+      // Combine all commands
+      const payload = new Uint8Array(init.length + alignCenter.length + escImage.length + cutPaper.length);
+      let offset = 0;
+      payload.set(init, offset); offset += init.length;
+      payload.set(alignCenter, offset); offset += alignCenter.length;
+      payload.set(escImage, offset); offset += escImage.length;
+      payload.set(cutPaper, offset);
+
+      // Send to printer in chunks
+      for (let i = 0; i < payload.length; i += 180) {
+        const slice = payload.slice(i, i + 180);
+        if (connection.characteristic.properties.writeWithoutResponse) {
+          await connection.characteristic.writeValueWithoutResponse(slice);
+        } else {
+          await connection.characteristic.writeValue(slice);
+        }
+        await new Promise((r) => setTimeout(r, 40));
+      }
+
+      if (onPrintComplete) onPrintComplete();
+      return true;
+    } catch (error) {
+      console.error('KOT Print error:', error);
+      if (onPrintError) onPrintError(error);
+
+      // Fallback to browser print
+      this.fallbackPrintKOT(orderItems, tableDisplay, orderNumber);
+      return false;
+    }
+  }
+  // Fallback print function for KOT
+  fallbackPrintKOT(orderItems, tableDisplay, orderNumber) {
+    const printWindow = window.open('', '_blank');
+
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>KOT #${orderNumber}</title>
+          <style>
+            @media print {
+              body {
+                font-family: 'Courier New', monospace;
+                width: 80mm;
+                margin: 0;
+                padding: 10px;
+                font-size: 12px;
+              }
+              .header { text-align: center; margin-bottom: 10px; }
+              .item { margin: 4px 0; display: flex; justify-content: space-between; }
+              .footer { text-align: center; margin-top: 10px; border-top: 1px dashed #000; padding-top: 5px; }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <h3>KITCHEN ORDER TICKET</h3>
+            <p>Order #: ${orderNumber}</p>
+            <p>${tableDisplay}</p>
+            <p>${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+            <hr>
+          </div>
+
+          <div class="items">
+            ${orderItems.map(item => `
+              <div class="item">
+                <span>${item.name}</span>
+                <span>Qty: ${item.quantity}</span>
+              </div>
+            `).join('')}
+          </div>
+
+          <div class="footer">
+            <p>*** KITCHEN COPY ***</p>
+          </div>
+        </body>
+      </html>
+    `);
+
+    printWindow.document.close();
+    printWindow.print();
+  }
+  // Fallback print function for KOT
   fallbackPrintOrder(orderData, tableNumber, orderNumber) {
     const printWindow = window.open('', '_blank');
     
