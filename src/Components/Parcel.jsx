@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ref, push, update, onValue, off, query, orderByChild, remove } from 'firebase/database'
 import { database } from '../Firebase/config'
@@ -50,6 +50,12 @@ const ParcelPage = () => {
   const [orderToDelete, setOrderToDelete] = useState(null)
   const [isConnecting, setIsConnecting] = useState(false)
   const [isPrinting, setIsPrinting] = useState(false)
+  
+  // Enhanced search state
+  const [showSuggestions, setShowSuggestions] = useState(false)
+  const [suggestions, setSuggestions] = useState([])
+  const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1)
+  const searchInputRef = useRef(null)
   
   // Parcel order state
   const [parcelOrders, setParcelOrders] = useState([])
@@ -138,10 +144,85 @@ const ParcelPage = () => {
     }
   }, [])
 
-  // Updated filteredMenuItems to handle 'all' category search
-  const filteredMenuItems = React.useMemo(() => {
+  // Generate search suggestions
+  useEffect(() => {
+    if (searchTerm.trim() === '') {
+      setSuggestions([])
+      setShowSuggestions(false)
+      setSelectedSuggestionIndex(-1)
+      return
+    }
+
     const searchLower = searchTerm.toLowerCase().trim()
+    const allItems = []
     
+    // Flatten all menu items into a single array
+    Object.keys(menuItems).forEach(category => {
+      menuItems[category].forEach(item => {
+        allItems.push({
+          ...item,
+          category
+        })
+      })
+    })
+
+    // Filter items based on search term
+    const filteredSuggestions = allItems.filter(item =>
+      item.name.toLowerCase().includes(searchLower) ||
+      (item.description && item.description.toLowerCase().includes(searchLower))
+    )
+
+    setSuggestions(filteredSuggestions)
+    setShowSuggestions(filteredSuggestions.length > 0)
+    setSelectedSuggestionIndex(-1)
+  }, [searchTerm, menuItems])
+
+  // Handle keyboard navigation for suggestions
+  const handleKeyDown = (e) => {
+    if (!showSuggestions) return
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      setSelectedSuggestionIndex(prev => 
+        prev < suggestions.length - 1 ? prev + 1 : 0
+      )
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      setSelectedSuggestionIndex(prev => 
+        prev > 0 ? prev - 1 : suggestions.length - 1
+      )
+    } else if (e.key === 'Enter') {
+      e.preventDefault()
+      if (selectedSuggestionIndex >= 0 && selectedSuggestionIndex < suggestions.length) {
+        const selectedItem = suggestions[selectedSuggestionIndex]
+        addToOrder(selectedItem)
+      } else if (searchTerm.trim() && suggestions.length > 0) {
+        addToOrder(suggestions[0])
+      }
+    } else if (e.key === 'Escape') {
+      setShowSuggestions(false)
+      setSelectedSuggestionIndex(-1)
+    }
+  }
+
+  // Handle clicking outside to close suggestions
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (searchInputRef.current && !searchInputRef.current.contains(event.target)) {
+        setShowSuggestions(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [])
+
+  // Filter menu items based on search and category
+  const filteredMenuItems = useMemo(() => {
+    const searchLower = searchTerm.toLowerCase().trim()
+
     if (!searchLower) {
       if (activeCategory === 'all') {
         return menuItems
@@ -171,6 +252,212 @@ const ParcelPage = () => {
     
     return filtered.length > 0 ? { [activeCategory]: filtered } : {}
   }, [menuItems, searchTerm, activeCategory])
+
+  const renderSearchSuggestions = () => {
+    if (!showSuggestions || suggestions.length === 0) return null
+
+    return (
+      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg max-h-80 overflow-y-auto z-30">
+        <div className="p-2">
+          <div className="flex items-center justify-between px-2 py-1.5 mb-1">
+            <span className="text-xs font-medium text-gray-500">
+              {suggestions.length} item{suggestions.length !== 1 ? 's' : ''} found
+            </span>
+            <span className="text-xs text-gray-400">
+              ↑↓ to navigate • Enter to select
+            </span>
+          </div>
+          {suggestions.map((item, index) => {
+            const inCart = selectedItems.find(i => i.id === item.id)
+            const isSelected = index === selectedSuggestionIndex
+
+            return (
+              <div
+                key={`${item.id}-${index}`}
+                className={`p-3 cursor-pointer transition-colors border-b border-gray-100 last:border-b-0 ${
+                  isSelected ? 'bg-emerald-50 border-emerald-200' : 'hover:bg-gray-50'
+                }`}
+                onClick={() => {
+                  addToOrder(item)
+                }}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3 flex-1">
+                    <span className="text-xl">{item.emoji}</span>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <h4 className="font-medium text-gray-800">{item.name}</h4>
+                        <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full">
+                          {item.category}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-3 text-xs text-gray-500">
+                        <span className="flex items-center gap-1">
+                          <Clock size={10} />
+                          {item.preparationTime} min
+                        </span>
+                        <span>₹{item.price}</span>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center gap-3">
+                    {inCart ? (
+                      <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1 bg-emerald-50 rounded-lg px-1 py-0.5">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              updateQuantity(item.id, inCart.quantity - 1)
+                            }}
+                            className="w-5 h-5 bg-white border border-emerald-300 rounded flex items-center justify-center hover:bg-emerald-50 transition-colors"
+                          >
+                            <Minus size={8} className="text-emerald-600" />
+                          </button>
+                          <span className="font-medium text-emerald-700 text-xs min-w-[16px] text-center">
+                            {inCart.quantity}
+                          </span>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              updateQuantity(item.id, inCart.quantity + 1)
+                            }}
+                            className="w-5 h-5 bg-emerald-100 rounded flex items-center justify-center hover:bg-emerald-200 transition-colors"
+                          >
+                            <Plus size={8} className="text-emerald-700" />
+                          </button>
+                        </div>
+                        <div className="text-right min-w-[50px]">
+                          <div className="text-xs font-medium text-emerald-600">
+                            ₹{item.price * inCart.quantity}
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          addToOrder(item)
+                        }}
+                        className="w-7 h-7 bg-emerald-50 hover:bg-emerald-100 rounded-lg flex items-center justify-center transition-colors"
+                      >
+                        <Plus size={12} className="text-emerald-600" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    )
+  }
+
+  const renderSearchResultsContent = () => {
+    if (!searchTerm.trim()) return null
+
+    // Flatten all menu items for search results
+    const allSearchItems = []
+    Object.keys(filteredMenuItems).forEach(category => {
+      if (Array.isArray(filteredMenuItems[category])) {
+        filteredMenuItems[category].forEach(item => {
+          allSearchItems.push({
+            ...item,
+            category
+          })
+        })
+      }
+    })
+
+    if (allSearchItems.length === 0) return null
+
+    return (
+      <div className="mb-6">
+        <div className="flex items-center justify-between mb-3 px-2">
+          <h3 className="text-lg font-semibold text-gray-900">Search Results</h3>
+          <span className="text-sm text-gray-500">
+            {allSearchItems.length} item{allSearchItems.length !== 1 ? 's' : ''}
+          </span>
+        </div>
+        
+        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+          {allSearchItems.map((item, index) => {
+            const inCart = selectedItems.find(i => i.id === item.id)
+            return (
+              <div
+                key={`search-${item.id}-${index}`}
+                className={`p-3 border-b border-gray-100 last:border-b-0 ${inCart ? 'bg-emerald-50' : ''}`}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3 flex-1">
+                    <span className="text-xl">{item.emoji}</span>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <h4 className="font-medium text-gray-800">{item.name}</h4>
+                        <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full">
+                          {item.category}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-3 text-xs text-gray-500">
+                        <span className="flex items-center gap-1">
+                          <Clock size={10} />
+                          {item.preparationTime} min
+                        </span>
+                        <span>₹{item.price}</span>
+                        {item.spicy && <span className="text-red-500">🌶️</span>}
+                        {item.popular && (
+                          <span className="bg-yellow-100 text-yellow-700 text-xs px-2 py-0.5 rounded-full">
+                            Popular
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center gap-3">
+                    {inCart ? (
+                      <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1 bg-emerald-50 rounded-lg px-1 py-0.5">
+                          <button
+                            onClick={() => updateQuantity(item.id, inCart.quantity - 1)}
+                            className="w-6 h-6 bg-white border border-emerald-300 rounded flex items-center justify-center hover:bg-emerald-50 transition-colors"
+                          >
+                            <Minus size={10} className="text-emerald-600" />
+                          </button>
+                          <span className="font-medium text-emerald-700 text-sm min-w-[20px] text-center">
+                            {inCart.quantity}
+                          </span>
+                          <button
+                            onClick={() => updateQuantity(item.id, inCart.quantity + 1)}
+                            className="w-6 h-6 bg-emerald-100 rounded flex items-center justify-center hover:bg-emerald-200 transition-colors"
+                          >
+                            <Plus size={10} className="text-emerald-700" />
+                          </button>
+                        </div>
+                        <div className="text-right min-w-[50px]">
+                          <div className="text-xs font-medium text-emerald-600">
+                            ₹{item.price * inCart.quantity}
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => addToOrder(item)}
+                        className="w-8 h-8 bg-emerald-50 hover:bg-emerald-100 rounded-lg flex items-center justify-center transition-colors"
+                      >
+                        <Plus size={14} className="text-emerald-600" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    )
+  }
 
   // Connect to Bluetooth printer
   const connectBluetooth = async () => {
@@ -509,351 +796,6 @@ const ParcelPage = () => {
   const totalAmount = selectedItems.reduce((sum, item) => sum + (item.price * item.quantity), 0)
   const totalItems = selectedItems.reduce((sum, item) => sum + item.quantity, 0)
 
-  const renderOrderSummaryModal = () => (
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white/95 backdrop-blur-sm rounded-2xl w-full max-w-md border border-gray-200/80 shadow-2xl">
-        <div className="p-5 border-b border-gray-100 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-emerald-50 rounded-xl flex items-center justify-center">
-              <ShoppingCart size={20} className="text-emerald-600" />
-            </div>
-            <div>
-              <h3 className="font-semibold text-gray-800">Order Summary</h3>
-              <p className="text-sm text-gray-500">Parcel Order</p>
-            </div>
-          </div>
-          <button
-            onClick={() => setShowOrderSummary(false)}
-            className="w-8 h-8 hover:bg-gray-100 rounded-xl flex items-center justify-center transition-colors"
-          >
-            <X size={18} />
-          </button>
-        </div>
-
-        <div className="p-5 max-h-64 overflow-y-auto">
-          <div className="space-y-3">
-            {selectedItems.map(item => (
-              <div key={item.id} className="flex items-center justify-between p-3 bg-white border border-gray-100 rounded-xl">
-                <div className="flex items-center gap-3">
-                  <span className="text-xl">{item.emoji}</span>
-                  <div>
-                    <p className="font-medium text-gray-800">{item.name}</p>
-                    <p className="text-sm text-gray-500">₹{item.price} × {item.quantity}</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <span className="font-semibold text-emerald-600">₹{item.price * item.quantity}</span>
-                  <button
-                    onClick={() => removeFromOrder(item.id)}
-                    className="w-7 h-7 bg-red-50 hover:bg-red-100 rounded-lg flex items-center justify-center transition-colors"
-                  >
-                    <Trash2 size={14} className="text-red-500" />
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="p-5 border-t border-gray-100 space-y-3">
-          <textarea
-            value={customerNotes}
-            onChange={(e) => setCustomerNotes(e.target.value)}
-            placeholder="Add special instructions..."
-            className="w-full p-3 text-sm bg-white border border-gray-200 rounded-xl focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/20 resize-none"
-            rows="2"
-          />
-
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-500">Total</p>
-              <p className="text-2xl font-bold text-emerald-600">₹{totalAmount}</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={clearCurrentOrder}
-                className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-xl transition-colors"
-              >
-                Clear
-              </button>
-              <button
-                onClick={submitParcelOrder}
-                disabled={loading || isPrinting}
-                className="px-5 py-2.5 bg-emerald-600 text-white rounded-xl font-medium hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-              >
-                {loading ? (
-                  <Loader2 size={16} className="animate-spin" />
-                ) : isPrinting ? (
-                  <>
-                    <Loader2 size={16} className="animate-spin" />
-                    <span>Printing...</span>
-                  </>
-                ) : (
-                  <>
-                    <Send size={16} />
-                    <span>Send Order</span>
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-
-  const renderParcelReadyModal = () => (
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white/95 backdrop-blur-sm rounded-2xl w-full max-w-md border border-gray-200/80 shadow-2xl">
-        <div className="p-5 border-b border-gray-100 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-emerald-50 rounded-xl flex items-center justify-center">
-              <CheckCircle size={20} className="text-emerald-600" />
-            </div>
-            <div>
-              <h3 className="font-semibold text-gray-800">Parcel Ready</h3>
-              <p className="text-sm text-gray-500">Order #{selectedParcelOrder?.orderNumber}</p>
-            </div>
-          </div>
-          <button
-            onClick={() => {
-              setShowParcelReadyModal(false)
-              setSelectedParcelOrder(null)
-            }}
-            className="w-8 h-8 hover:bg-gray-100 rounded-xl flex items-center justify-center transition-colors"
-          >
-            <X size={18} />
-          </button>
-        </div>
-
-        <div className="p-5">
-          <div className="bg-emerald-50 rounded-xl p-4 mb-4">
-            <p className="text-sm text-gray-800 mb-2">Mark this parcel order as ready from kitchen?</p>
-            <div className="space-y-2">
-              {selectedParcelOrder?.items?.slice(0, 3).map((item, index) => (
-                <div key={index} className="flex items-center justify-between text-sm">
-                  <span className="text-gray-700">{item.quantity}x {item.name}</span>
-                  <span className="font-medium text-emerald-600">₹{item.price * item.quantity}</span>
-                </div>
-              ))}
-              {selectedParcelOrder?.items?.length > 3 && (
-                <div className="text-sm text-gray-500 text-center">
-                  +{selectedParcelOrder.items.length - 3} more items
-                </div>
-              )}
-            </div>
-            <div className="mt-3 pt-3 border-t border-emerald-100">
-              <div className="flex items-center justify-between">
-                <span className="font-medium text-gray-800">Total:</span>
-                <span className="text-lg font-bold text-emerald-600">₹{selectedParcelOrder?.total}</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between">
-            <button
-              onClick={() => {
-                setShowParcelReadyModal(false)
-                setSelectedParcelOrder(null)
-              }}
-              className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-xl transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={() => markParcelReady(selectedParcelOrder?.id)}
-              disabled={loading}
-              className="px-5 py-2.5 bg-emerald-600 text-white rounded-xl font-medium hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-            >
-              {loading ? (
-                <Loader2 size={16} className="animate-spin" />
-              ) : (
-                <>
-                  <Check size={16} />
-                  <span>Mark as Ready</span>
-                </>
-              )}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-
-  const renderSendToBillModal = () => (
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white/95 backdrop-blur-sm rounded-2xl w-full max-w-md border border-gray-200/80 shadow-2xl">
-        <div className="p-5 border-b border-gray-100 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center">
-              <Receipt size={20} className="text-blue-600" />
-            </div>
-            <div>
-              <h3 className="font-semibold text-gray-800">Send to Bill Counter</h3>
-              <p className="text-sm text-gray-500">Order #{selectedParcelOrder?.orderNumber}</p>
-            </div>
-          </div>
-          <button
-            onClick={() => {
-              setShowSendToBillModal(false)
-              setSelectedParcelOrder(null)
-            }}
-            className="w-8 h-8 hover:bg-gray-100 rounded-xl flex items-center justify-center transition-colors"
-          >
-            <X size={18} />
-          </button>
-        </div>
-
-        <div className="p-5">
-          <div className="bg-blue-50 rounded-xl p-4 mb-4">
-            <p className="text-sm text-gray-800 mb-2">Send this parcel order to bill counter for final billing?</p>
-            <div className="space-y-2">
-              {selectedParcelOrder?.items?.slice(0, 3).map((item, index) => (
-                <div key={index} className="flex items-center justify-between text-sm">
-                  <span className="text-gray-700">{item.quantity}x {item.name}</span>
-                  <span className="font-medium text-blue-600">₹{item.price * item.quantity}</span>
-                </div>
-              ))}
-              {selectedParcelOrder?.items?.length > 3 && (
-                <div className="text-sm text-gray-500 text-center">
-                  +{selectedParcelOrder.items.length - 3} more items
-                </div>
-              )}
-            </div>
-            <div className="mt-3 pt-3 border-t border-blue-100">
-              <div className="flex items-center justify-between">
-                <span className="font-medium text-gray-800">Total Amount:</span>
-                <span className="text-lg font-bold text-blue-600">₹{selectedParcelOrder?.total}</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="mb-4 p-3 bg-amber-50 rounded-xl border border-amber-100">
-            <div className="flex items-start gap-2">
-              <AlertCircle size={16} className="text-amber-600 mt-0.5" />
-              <p className="text-sm text-amber-700">
-                This will create a bill record and send notification to bill counter for final billing.
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between">
-            <button
-              onClick={() => {
-                setShowSendToBillModal(false)
-                setSelectedParcelOrder(null)
-              }}
-              className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-xl transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={() => sendParcelToBillCounter(selectedParcelOrder?.id)}
-              disabled={loading}
-              className="px-5 py-2.5 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-            >
-              {loading ? (
-                <Loader2 size={16} className="animate-spin" />
-              ) : (
-                <>
-                  <ArrowRight size={16} />
-                  <span>Send to Bill Counter</span>
-                </>
-              )}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-
-  const renderDeleteConfirmModal = () => (
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white/95 backdrop-blur-sm rounded-2xl w-full max-w-md border border-gray-200/80 shadow-2xl">
-        <div className="p-5 border-b border-gray-100 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-red-50 rounded-xl flex items-center justify-center">
-              <AlertTriangle size={20} className="text-red-600" />
-            </div>
-            <div>
-              <h3 className="font-semibold text-gray-800">Delete Order</h3>
-              <p className="text-sm text-gray-500">Order #{orderToDelete?.orderNumber}</p>
-            </div>
-          </div>
-          <button
-            onClick={() => {
-              setShowDeleteConfirm(false)
-              setOrderToDelete(null)
-            }}
-            className="w-8 h-8 hover:bg-gray-100 rounded-xl flex items-center justify-center transition-colors"
-          >
-            <X size={18} />
-          </button>
-        </div>
-
-        <div className="p-5">
-          <div className="bg-red-50 rounded-xl p-4 mb-4 border border-red-100">
-            <p className="text-sm text-gray-800 mb-2">Are you sure you want to delete this parcel order?</p>
-            <div className="space-y-2">
-              {orderToDelete?.items?.slice(0, 2).map((item, index) => (
-                <div key={index} className="flex items-center justify-between text-sm">
-                  <span className="text-gray-700">{item.quantity}x {item.name}</span>
-                  <span className="font-medium text-red-600">₹{item.price * item.quantity}</span>
-                </div>
-              ))}
-              {orderToDelete?.items?.length > 2 && (
-                <div className="text-sm text-gray-500 text-center">
-                  +{orderToDelete.items.length - 2} more items
-                </div>
-              )}
-            </div>
-            <div className="mt-3 pt-3 border-t border-red-100">
-              <div className="flex items-center justify-between">
-                <span className="font-medium text-gray-800">Total Amount:</span>
-                <span className="text-lg font-bold text-red-600">₹{orderToDelete?.total}</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="mb-4 p-3 bg-amber-50 rounded-xl border border-amber-100">
-            <div className="flex items-start gap-2">
-              <AlertCircle size={16} className="text-amber-600 mt-0.5" />
-              <p className="text-sm text-amber-700">
-                This action cannot be undone. The order will be permanently deleted from the system.
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between">
-            <button
-              onClick={() => {
-                setShowDeleteConfirm(false)
-                setOrderToDelete(null)
-              }}
-              className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-xl transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={deleteParcelOrder}
-              disabled={loading}
-              className="px-5 py-2.5 bg-red-600 text-white rounded-xl font-medium hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-            >
-              {loading ? (
-                <Loader2 size={16} className="animate-spin" />
-              ) : (
-                <>
-                  <Trash2 size={16} />
-                  <span>Delete Order</span>
-                </>
-              )}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-
   const renderMenuItemCard = (item) => {
     const inCart = selectedItems.find(i => i.id === item.id)
     
@@ -1014,16 +956,26 @@ const ParcelPage = () => {
                 </div>
               )}
 
-              {/* Search */}
-              <div className="relative">
+              {/* Enhanced Search with Suggestions */}
+              <div className="relative" ref={searchInputRef}>
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
                 <input
                   type="text"
                   placeholder="Search all menu items..."
                   value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
+                  onChange={(e) => {
+                    setSearchTerm(e.target.value)
+                    setShowSuggestions(true)
+                  }}
+                  onKeyDown={handleKeyDown}
+                  onFocus={() => {
+                    if (searchTerm.trim() && suggestions.length > 0) {
+                      setShowSuggestions(true)
+                    }
+                  }}
                   className="w-full pl-10 pr-4 py-2.5 text-sm bg-white border border-gray-200 rounded-xl focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/20 transition-colors"
                 />
+                {renderSearchSuggestions()}
               </div>
             </div>
 
@@ -1060,6 +1012,9 @@ const ParcelPage = () => {
 
           {/* Content Area */}
           <div className="flex-1 overflow-y-auto p-4">
+            {/* Show search results when searching */}
+            {searchTerm.trim() && renderSearchResultsContent()}
+
             {/* Active Parcel Orders */}
             {parcelOrders.length > 0 && (
               <div className="mb-6">
@@ -1197,53 +1152,55 @@ const ParcelPage = () => {
               </div>
             )}
 
-            {/* Menu Items */}
-            <div className="bg-white rounded-xl border border-gray-200 p-4 mb-6">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="font-semibold text-gray-900 flex items-center gap-2">
-                  <ChefHat size={18} className="text-emerald-600" />
-                  Menu Items
-                </h3>
-                <div className="text-sm text-gray-500">
-                  {Object.keys(menuItems).reduce((count, category) => count + menuItems[category].length, 0)} items
+            {/* Menu Items - Only show when not searching or after search results */}
+            {(!searchTerm.trim() || activeCategory !== 'all') && (
+              <div className="bg-white rounded-xl border border-gray-200 p-4 mb-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                    <ChefHat size={18} className="text-emerald-600" />
+                    Menu Items
+                  </h3>
+                  <div className="text-sm text-gray-500">
+                    {Object.keys(menuItems).reduce((count, category) => count + menuItems[category].length, 0)} items
+                  </div>
                 </div>
-              </div>
 
-              {/* Show all categories when 'All' is selected */}
-              {activeCategory === 'all' ? (
-                <div className="space-y-6">
-                  {Object.keys(filteredMenuItems).length > 0 ? (
-                    Object.keys(filteredMenuItems).map(category => (
-                      <div key={category}>
-                        <h3 className="text-lg font-semibold text-gray-900 mb-3 px-2">{category}</h3>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-                          {filteredMenuItems[category]?.map(item => renderMenuItemCard(item))}
+                {/* Show all categories when 'All' is selected */}
+                {activeCategory === 'all' ? (
+                  <div className="space-y-6">
+                    {Object.keys(filteredMenuItems).length > 0 ? (
+                      Object.keys(filteredMenuItems).map(category => (
+                        <div key={category}>
+                          <h3 className="text-lg font-semibold text-gray-900 mb-3 px-2">{category}</h3>
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                            {filteredMenuItems[category]?.map(item => renderMenuItemCard(item))}
+                          </div>
                         </div>
+                      ))
+                    ) : (
+                      <div className="text-center py-12">
+                        <Search className="mx-auto text-gray-400 mb-3" size={32} />
+                        <p className="text-gray-600 font-medium">No items found</p>
+                        <p className="text-gray-500 text-sm mt-1">Try a different search</p>
                       </div>
-                    ))
-                  ) : (
-                    <div className="text-center py-12">
-                      <Search className="mx-auto text-gray-400 mb-3" size={32} />
-                      <p className="text-gray-600 font-medium">No items found</p>
-                      <p className="text-gray-500 text-sm mt-1">Try a different search</p>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                /* Show specific category */
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-                  {filteredMenuItems[activeCategory]?.length > 0 ? (
-                    filteredMenuItems[activeCategory]?.map(item => renderMenuItemCard(item))
-                  ) : (
-                    <div className="col-span-full text-center py-12">
-                      <Search className="mx-auto text-gray-400 mb-3" size={32} />
-                      <p className="text-gray-600 font-medium">No items found in {activeCategory}</p>
-                      <p className="text-gray-500 text-sm mt-1">Try a different search or category</p>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
+                    )}
+                  </div>
+                ) : (
+                  /* Show specific category */
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                    {filteredMenuItems[activeCategory]?.length > 0 ? (
+                      filteredMenuItems[activeCategory]?.map(item => renderMenuItemCard(item))
+                    ) : (
+                      <div className="col-span-full text-center py-12">
+                        <Search className="mx-auto text-gray-400 mb-3" size={32} />
+                        <p className="text-gray-600 font-medium">No items found in {activeCategory}</p>
+                        <p className="text-gray-500 text-sm mt-1">Try a different search or category</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Bottom Action Bar */}
@@ -1293,7 +1250,98 @@ const ParcelPage = () => {
       </div>
 
       {/* Modals */}
-      {showOrderSummary && renderOrderSummaryModal()}
+      {showOrderSummary && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white/95 backdrop-blur-sm rounded-2xl w-full max-w-md border border-gray-200/80 shadow-2xl">
+            <div className="p-5 border-b border-gray-100 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-emerald-50 rounded-xl flex items-center justify-center">
+                  <ShoppingCart size={20} className="text-emerald-600" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-gray-800">Order Summary</h3>
+                  <p className="text-sm text-gray-500">Parcel Order</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowOrderSummary(false)}
+                className="w-8 h-8 hover:bg-gray-100 rounded-xl flex items-center justify-center transition-colors"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="p-5 max-h-64 overflow-y-auto">
+              <div className="space-y-3">
+                {selectedItems.map(item => (
+                  <div key={item.id} className="flex items-center justify-between p-3 bg-white border border-gray-100 rounded-xl">
+                    <div className="flex items-center gap-3">
+                      <span className="text-xl">{item.emoji}</span>
+                      <div>
+                        <p className="font-medium text-gray-800">{item.name}</p>
+                        <p className="text-sm text-gray-500">₹{item.price} × {item.quantity}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="font-semibold text-emerald-600">₹{item.price * item.quantity}</span>
+                      <button
+                        onClick={() => removeFromOrder(item.id)}
+                        className="w-7 h-7 bg-red-50 hover:bg-red-100 rounded-lg flex items-center justify-center transition-colors"
+                      >
+                        <Trash2 size={14} className="text-red-500" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="p-5 border-t border-gray-100 space-y-3">
+              <textarea
+                value={customerNotes}
+                onChange={(e) => setCustomerNotes(e.target.value)}
+                placeholder="Add special instructions..."
+                className="w-full p-3 text-sm bg-white border border-gray-200 rounded-xl focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/20 resize-none"
+                rows="2"
+              />
+
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-500">Total</p>
+                  <p className="text-2xl font-bold text-emerald-600">₹{totalAmount}</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={clearCurrentOrder}
+                    className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-xl transition-colors"
+                  >
+                    Clear
+                  </button>
+                  <button
+                    onClick={submitParcelOrder}
+                    disabled={loading || isPrinting}
+                    className="px-5 py-2.5 bg-emerald-600 text-white rounded-xl font-medium hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  >
+                    {loading ? (
+                      <Loader2 size={16} className="animate-spin" />
+                    ) : isPrinting ? (
+                      <>
+                        <Loader2 size={16} className="animate-spin" />
+                        <span>Printing...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Send size={16} />
+                        <span>Send Order</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       {showParcelReadyModal && renderParcelReadyModal()}
       {showSendToBillModal && renderSendToBillModal()}
       {showDeleteConfirm && renderDeleteConfirmModal()}

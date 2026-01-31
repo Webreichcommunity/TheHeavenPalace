@@ -354,75 +354,174 @@ const OrderManager = ({
   const totalAmount = selectedItems.reduce((sum, item) => sum + (item.price * item.quantity), 0)
   const totalItems = selectedItems.reduce((sum, item) => sum + item.quantity, 0)
 
+  // const renderMenuItemCard = (item) => {
+  //   const inCart = selectedItems.find(i => i.id === item.id)
+
+  //   return (
+  //     <div
+  //       key={item.id}
+  //       className="bg-white rounded-xl border border-gray-200 hover:border-emerald-300 transition-colors overflow-hidden"
+  //     >
+  //       <div className="p-4">
+  //         <div className="flex justify-between items-start mb-3">
+  //           <div className="flex-1">
+  //             <div className="flex items-center gap-2 mb-2">
+  //               <span className="text-2xl">{item.emoji}</span>
+  //               {item.popular && (
+  //                 <span className="bg-yellow-100 text-yellow-700 text-xs px-2 py-1 rounded-full font-medium">
+  //                   Popular
+  //                 </span>
+  //               )}
+  //             </div>
+  //             <h3 className="font-semibold text-gray-900 text-base mb-1">{item.name}</h3>
+  //             <div className="flex items-center gap-2 text-sm text-gray-500">
+  //               <Clock size={14} />
+  //               <span>{item.preparationTime} min</span>
+  //               {item.spicy && <span className="text-red-500">🌶️</span>}
+  //             </div>
+  //           </div>
+  //           <div className="text-right">
+  //             <div className="font-bold text-emerald-600">₹{item.price}</div>
+  //           </div>
+  //         </div>
+
+  //         {inCart ? (
+  //           <div className="flex items-center justify-between bg-emerald-50 rounded-xl p-1">
+  //             <button
+  //               onClick={() => handleQuantityChange(item.id, "minus", inCart.quantity)}
+  //               className="w-8 h-8 bg-white rounded-lg flex items-center justify-center hover:bg-gray-50 transition-colors"
+  //             >
+  //               <Minus size={14} className="text-emerald-600" />
+  //             </button>
+
+  //             <div className="flex flex-col items-center">
+  //               <span className="font-bold text-emerald-700">
+  //                 {inCart.quantity}
+  //               </span>
+  //               <span className="text-xs text-emerald-600 font-medium">
+  //                 in cart
+  //               </span>
+  //             </div>
+
+  //             <button
+  //               onClick={() => handleQuantityChange(item.id, "plus", inCart.quantity)}
+  //               className="w-8 h-8 bg-emerald-600 rounded-lg flex items-center justify-center hover:bg-emerald-700 transition-colors"
+  //             >
+  //               <Plus size={14} className="text-white" />
+  //             </button>
+  //           </div>
+  //         ) : (
+  //           <button
+  //             onClick={() => addToOrder(item)}
+  //             className="w-full py-2.5 bg-emerald-50 text-emerald-700 rounded-xl font-medium hover:bg-emerald-100 transition-colors flex items-center justify-center gap-2"
+  //           >
+  //             <Plus size={16} />
+  //             <span>Add to Order</span>
+  //           </button>
+  //         )}
+  //       </div>
+  //     </div>
+  //   )
+  // }
+
   const renderMenuItemCard = (item) => {
     const inCart = selectedItems.find(i => i.id === item.id)
+    
+    // Handle minus button click with threshold check
+    const handleMinusClick = () => {
+        if (inCart && inCart.quantity > 0.5) {
+            handleQuantityChange(item.id, "minus", inCart.quantity)
+        } else if (inCart && inCart.quantity <= 0.5) {
+            // Remove from cart when quantity is 0.5 or less
+            handleQuantityChange(item.id, "remove", inCart.quantity)
+        }
+    }
 
     return (
-      <div
-        key={item.id}
-        className="bg-white rounded-xl border border-gray-200 hover:border-emerald-300 transition-colors overflow-hidden"
-      >
-        <div className="p-4">
-          <div className="flex justify-between items-start mb-3">
-            <div className="flex-1">
-              <div className="flex items-center gap-2 mb-2">
-                <span className="text-2xl">{item.emoji}</span>
-                {item.popular && (
-                  <span className="bg-yellow-100 text-yellow-700 text-xs px-2 py-1 rounded-full font-medium">
-                    Popular
-                  </span>
+        <div
+            key={item.id}
+            className="bg-white rounded-xl border border-gray-200 hover:border-emerald-300 transition-colors overflow-hidden flex flex-col md:flex-row min-h-[140px] md:min-h-0"
+        >
+            {/* Left side - Emoji and info */}
+            <div className="flex p-4 md:p-3 md:flex-1">
+                <div className="mr-3 md:mr-4 flex-shrink-0">
+                    <span className="text-3xl md:text-2xl block">{item.emoji}</span>
+                </div>
+                
+                <div className="flex-1 min-w-0">
+                    <div className="flex flex-wrap items-center gap-1.5 md:gap-2 mb-1.5">
+                        <h3 className="font-semibold text-gray-900 text-base md:text-sm truncate">
+                            {item.name}
+                        </h3>
+                        {item.popular && (
+                            <span className="bg-yellow-100 text-yellow-700 text-xs px-1.5 py-0.5 rounded-full font-medium whitespace-nowrap flex-shrink-0">
+                                Popular
+                            </span>
+                        )}
+                    </div>
+                    
+                    <div className="flex items-center gap-1.5 text-sm md:text-xs text-gray-500 mb-2">
+                        <Clock size={12} className="flex-shrink-0" />
+                        <span>{item.preparationTime} min</span>
+                        {item.spicy && <span className="text-red-500 ml-1">🌶️</span>}
+                    </div>
+                    
+                    <div className="font-bold text-emerald-600 text-lg md:text-base">
+                        ₹{item.price}
+                    </div>
+                </div>
+            </div>
+
+            {/* Right side - Quantity controls or Add button */}
+            <div className="border-t md:border-t-0 md:border-l border-gray-100 p-4 md:p-3 flex-shrink-0">
+                {inCart ? (
+                    <div className="flex items-center justify-between md:flex-col md:items-end md:gap-2">
+                        <div className="flex items-center gap-3 md:gap-2">
+                            <button
+                                onClick={handleMinusClick}
+                                className="w-7 h-7 md:w-6 md:h-6 bg-emerald-50 rounded-lg flex items-center justify-center hover:bg-emerald-100 transition-colors flex-shrink-0"
+                            >
+                                <Minus size={12} className="text-emerald-600" />
+                            </button>
+
+                            <div className="flex flex-col items-center min-w-[40px]">
+                                <span className="font-bold text-emerald-700 text-base">
+                                    {inCart.quantity}
+                                </span>
+                                <span className="text-xs text-emerald-600 font-medium">
+                                    in cart
+                                </span>
+                            </div>
+
+                            <button
+                                onClick={() => handleQuantityChange(item.id, "plus", inCart.quantity)}
+                                className="w-7 h-7 md:w-6 md:h-6 bg-emerald-600 rounded-lg flex items-center justify-center hover:bg-emerald-700 transition-colors flex-shrink-0"
+                            >
+                                <Plus size={12} className="text-white" />
+                            </button>
+                        </div>
+                        
+                        {/* Total price for the item */}
+                        <div className="text-right md:text-center">
+                            <div className="font-bold text-gray-900 text-sm">
+                                ₹{(item.price * inCart.quantity).toFixed(2)}
+                            </div>
+                            <div className="text-xs text-gray-500">Total</div>
+                        </div>
+                    </div>
+                ) : (
+                    <button
+                        onClick={() => addToOrder(item)}
+                        className="w-full md:w-auto py-2 px-4 bg-emerald-50 text-emerald-700 rounded-xl font-medium hover:bg-emerald-100 transition-colors flex items-center justify-center gap-2 whitespace-nowrap"
+                    >
+                        <Plus size={14} />
+                        <span className="text-sm">Add</span>
+                    </button>
                 )}
-              </div>
-              <h3 className="font-semibold text-gray-900 text-base mb-1">{item.name}</h3>
-              <div className="flex items-center gap-2 text-sm text-gray-500">
-                <Clock size={14} />
-                <span>{item.preparationTime} min</span>
-                {item.spicy && <span className="text-red-500">🌶️</span>}
-              </div>
             </div>
-            <div className="text-right">
-              <div className="font-bold text-emerald-600">₹{item.price}</div>
-            </div>
-          </div>
-
-          {inCart ? (
-            <div className="flex items-center justify-between bg-emerald-50 rounded-xl p-1">
-              <button
-                onClick={() => handleQuantityChange(item.id, "minus", inCart.quantity)}
-                className="w-8 h-8 bg-white rounded-lg flex items-center justify-center hover:bg-gray-50 transition-colors"
-              >
-                <Minus size={14} className="text-emerald-600" />
-              </button>
-
-              <div className="flex flex-col items-center">
-                <span className="font-bold text-emerald-700">
-                  {inCart.quantity}
-                </span>
-                <span className="text-xs text-emerald-600 font-medium">
-                  in cart
-                </span>
-              </div>
-
-              <button
-                onClick={() => handleQuantityChange(item.id, "plus", inCart.quantity)}
-                className="w-8 h-8 bg-emerald-600 rounded-lg flex items-center justify-center hover:bg-emerald-700 transition-colors"
-              >
-                <Plus size={14} className="text-white" />
-              </button>
-            </div>
-          ) : (
-            <button
-              onClick={() => addToOrder(item)}
-              className="w-full py-2.5 bg-emerald-50 text-emerald-700 rounded-xl font-medium hover:bg-emerald-100 transition-colors flex items-center justify-center gap-2"
-            >
-              <Plus size={16} />
-              <span>Add to Order</span>
-            </button>
-          )}
         </div>
-      </div>
     )
-  }
+}
 
   const renderSuggestionItem = (item, index) => {
     const inCart = selectedItems.find(i => i.id === item.id)
