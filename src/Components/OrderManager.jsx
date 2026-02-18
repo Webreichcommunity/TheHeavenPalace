@@ -71,6 +71,8 @@ const OrderManager = ({
   const [suggestions, setSuggestions] = useState([])
   const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1)
   const searchInputRef = useRef(null)
+  const suggestionsContainerRef = useRef(null)
+  const selectedSuggestionRef = useRef(null)
 
   // Filter menu items based on search and category
   const filteredMenuItems = useMemo(() => {
@@ -312,24 +314,37 @@ const OrderManager = ({
 
     if (e.key === 'ArrowDown') {
       e.preventDefault()
-      setSelectedSuggestionIndex(prev => 
-        prev < suggestions.length - 1 ? prev + 1 : 0
-      )
+      setSelectedSuggestionIndex(prev => {
+        const newIndex = prev < suggestions.length - 1 ? prev + 1 : 0
+        // Scroll into view after state update
+        setTimeout(() => {
+          const selectedElement = document.querySelector('[data-suggestion-index="' + newIndex + '"]')
+          if (selectedElement && suggestionsContainerRef.current) {
+            selectedElement.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+          }
+        }, 0)
+        return newIndex
+      })
     } else if (e.key === 'ArrowUp') {
       e.preventDefault()
-      setSelectedSuggestionIndex(prev => 
-        prev > 0 ? prev - 1 : suggestions.length - 1
-      )
+      setSelectedSuggestionIndex(prev => {
+        const newIndex = prev > 0 ? prev - 1 : suggestions.length - 1
+        // Scroll into view after state update
+        setTimeout(() => {
+          const selectedElement = document.querySelector('[data-suggestion-index="' + newIndex + '"]')
+          if (selectedElement && suggestionsContainerRef.current) {
+            selectedElement.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+          }
+        }, 0)
+        return newIndex
+      })
     } else if (e.key === 'Enter') {
       e.preventDefault()
       if (selectedSuggestionIndex >= 0 && selectedSuggestionIndex < suggestions.length) {
         const selectedItem = suggestions[selectedSuggestionIndex]
         addToOrder(selectedItem)
-        // Don't clear search term or close suggestions
       } else if (searchTerm.trim() && suggestions.length > 0) {
-        // Add first suggestion if no specific suggestion selected
         addToOrder(suggestions[0])
-        // Don't clear search term or close suggestions
       }
     } else if (e.key === 'Escape') {
       setShowSuggestions(false)
@@ -530,8 +545,11 @@ const OrderManager = ({
     return (
       <div
         key={`${item.id}-${index}`}
-        className={`p-3 cursor-pointer transition-colors border-b border-gray-100 last:border-b-0 ${
-          isSelected ? 'bg-emerald-50 border-emerald-200' : 'hover:bg-gray-50'
+        data-suggestion-index={index}
+        className={`p-4 cursor-pointer transition-all border-b border-gray-100 last:border-b-0 ${
+          isSelected 
+            ? 'bg-emerald-700 hover:bg-emerald-800' 
+            : 'hover:bg-gray-100'
         }`}
         onClick={() => {
           addToOrder(item)
@@ -542,12 +560,20 @@ const OrderManager = ({
             <span className="text-xl">{item.emoji}</span>
             <div className="flex-1">
               <div className="flex items-center gap-2 mb-1">
-                <h4 className="font-medium text-gray-800">{item.name}</h4>
-                <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full">
+                <h4 className={`font-semibold ${isSelected ? 'text-white' : 'text-gray-900'}`}>
+                  {item.name}
+                </h4>
+                <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                  isSelected 
+                    ? 'bg-emerald-600 text-white' 
+                    : 'bg-gray-100 text-gray-600'
+                }`}>
                   {item.category}
                 </span>
               </div>
-              <div className="flex items-center gap-3 text-xs text-gray-500">
+              <div className={`flex items-center gap-3 text-xs ${
+                isSelected ? 'text-emerald-100' : 'text-gray-500'
+              }`}>
                 <span className="flex items-center gap-1">
                   <Clock size={10} />
                   {item.preparationTime} min
@@ -560,17 +586,27 @@ const OrderManager = ({
           <div className="flex items-center gap-3">
             {inCart ? (
               <div className="flex items-center gap-2">
-                <div className="flex items-center gap-1 bg-emerald-50 rounded-lg px-1 py-0.5">
+                <div className={`flex items-center gap-1 rounded-lg px-1.5 py-0.5 ${
+                  isSelected 
+                    ? 'bg-emerald-600' 
+                    : 'bg-emerald-50'
+                }`}>
                   <button
                     onClick={(e) => {
                       e.stopPropagation()
                       handleQuantityChange(item.id, "minus", inCart.quantity)
                     }}
-                    className="w-5 h-5 bg-white border border-emerald-300 rounded flex items-center justify-center hover:bg-emerald-50 transition-colors"
+                    className={`w-5 h-5 rounded flex items-center justify-center transition-colors ${
+                      isSelected
+                        ? 'bg-emerald-700 hover:bg-emerald-800 border border-emerald-500'
+                        : 'bg-white border border-emerald-300 hover:bg-emerald-50'
+                    }`}
                   >
-                    <Minus size={8} className="text-emerald-600" />
+                    <Minus size={8} className={isSelected ? 'text-white' : 'text-emerald-600'} />
                   </button>
-                  <span className="font-medium text-emerald-700 text-xs min-w-[16px] text-center">
+                  <span className={`font-medium text-xs min-w-[16px] text-center ${
+                    isSelected ? 'text-white' : 'text-emerald-700'
+                  }`}>
                     {inCart.quantity}
                   </span>
                   <button
@@ -578,13 +614,19 @@ const OrderManager = ({
                       e.stopPropagation()
                       handleQuantityChange(item.id, "plus", inCart.quantity)
                     }}
-                    className="w-5 h-5 bg-emerald-100 rounded flex items-center justify-center hover:bg-emerald-200 transition-colors"
+                    className={`w-5 h-5 rounded flex items-center justify-center transition-colors ${
+                      isSelected
+                        ? 'bg-emerald-600 hover:bg-emerald-500 border border-emerald-500'
+                        : 'bg-emerald-100 hover:bg-emerald-200'
+                    }`}
                   >
-                    <Plus size={8} className="text-emerald-700" />
+                    <Plus size={8} className={isSelected ? 'text-white' : 'text-emerald-700'} />
                   </button>
                 </div>
                 <div className="text-right min-w-[50px]">
-                  <div className="text-xs font-medium text-emerald-600">
+                  <div className={`text-xs font-medium ${
+                    isSelected ? 'text-white' : 'text-emerald-600'
+                  }`}>
                     ₹{item.price * inCart.quantity}
                   </div>
                 </div>
@@ -595,9 +637,13 @@ const OrderManager = ({
                   e.stopPropagation()
                   addToOrder(item)
                 }}
-                className="w-7 h-7 bg-emerald-50 hover:bg-emerald-100 rounded-lg flex items-center justify-center transition-colors"
+                className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors ${
+                  isSelected
+                    ? 'bg-emerald-600 hover:bg-emerald-500'
+                    : 'bg-emerald-50 hover:bg-emerald-100'
+                }`}
               >
-                <Plus size={12} className="text-emerald-600" />
+                <Plus size={12} className={isSelected ? 'text-white' : 'text-emerald-600'} />
               </button>
             )}
           </div>
@@ -610,16 +656,21 @@ const OrderManager = ({
     if (!showSuggestions || suggestions.length === 0) return null
 
     return (
-      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg max-h-80 overflow-y-auto z-30">
-        <div className="p-2">
-          <div className="flex items-center justify-between px-2 py-1.5 mb-1">
-            <span className="text-xs font-medium text-gray-500">
-              {suggestions.length} item{suggestions.length !== 1 ? 's' : ''} found
+      <div 
+        ref={suggestionsContainerRef}
+        className="absolute top-full left-0 right-0 mt-2 bg-white border border-gray-200 rounded-xl shadow-xl max-h-96 overflow-y-auto z-30"
+      >
+        <div className="sticky top-0 bg-white border-b border-gray-100 px-3 py-2 z-10">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-gray-700">
+              {suggestions.length} result{suggestions.length !== 1 ? 's' : ''} found
             </span>
-            <span className="text-xs text-gray-400">
-              ↑↓ to navigate • Enter to select
+            <span className="text-xs text-gray-400 font-medium">
+              ↑↓ Navigate • Enter Select • Esc Close
             </span>
           </div>
+        </div>
+        <div>
           {suggestions.map((item, index) => renderSuggestionItem(item, index))}
         </div>
       </div>
