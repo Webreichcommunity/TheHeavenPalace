@@ -1,7 +1,7 @@
 // src/components/Dashboard.jsx
 import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ref, onValue, off, query, orderByChild, update } from 'firebase/database'
+import { ref, onValue, off, query, orderByChild, update, remove } from 'firebase/database'
 import { database } from '../Firebase/config'
 import { 
   Users, 
@@ -226,7 +226,7 @@ const Dashboard = () => {
       if (notificationsToDelete.length > 0) {
         notificationsToDelete.forEach(notificationId => {
           const notificationRef = ref(database, `notifications/${notificationId}`)
-          update(notificationRef, null).catch(error => {
+          remove(notificationRef).catch(error => {
             console.error('Error deleting old notification:', error)
           })
         })
@@ -239,8 +239,14 @@ const Dashboard = () => {
   // Calculate statistics with proper data handling
   const getStats = () => {
     try {
-      // Convert orders object to array
-      const ordersArray = Object.values(orders || {})
+      const now = new Date()
+      const todayKey = now.toISOString().split('T')[0]
+
+      // Convert orders object to array with ids
+      const ordersArray = Object.entries(orders || {}).map(([id, order]) => ({
+        id,
+        ...order
+      }))
       
       // Filter active orders (status === 'active')
       const activeOrders = ordersArray.filter(order => order.status === 'active')
@@ -268,18 +274,38 @@ const Dashboard = () => {
       // Count occupied tables (from database)
       const occupiedTables = tables.filter(table => table.status === 'occupied').length
       const availableTables = totalTables - occupiedTables
-      
-      // Get today's date for filtering
-      const today = new Date()
-      const todayKey = today.toISOString().split('T')[0]
-      
-      // Get today's revenue from dailyRevenue collection
+
+      const todayRevenueFromBills = Object.values(bills || {}).reduce((sum, bill) => {
+        if (!bill?.completedAt) return sum
+        return new Date(bill.completedAt).toISOString().split('T')[0] === todayKey
+          ? sum + (bill.finalTotal || bill.total || 0)
+          : sum
+      }, 0)
+
+      // Fallback when billing records are cleared after payment
+      const todayClosedOrders = ordersArray.filter(order => {
+        if (!order?.closedAt || order.status !== 'closed') return false
+        return new Date(order.closedAt).toISOString().split('T')[0] === todayKey
+      })
+      const todayRevenueFromOrders = todayClosedOrders.reduce((sum, order) => sum + (order.total || 0), 0)
+
       const todayRevenueData = dailyRevenue[todayKey] || { revenue: 0, billsCount: 0 }
-      const todayRevenue = todayRevenueData.revenue || 0
-      const todayBills = todayRevenueData.billsCount || 0
+      const todayRevenue = Math.max(
+        todayRevenueData.revenue || 0,
+        todayRevenueFromBills || 0,
+        todayRevenueFromOrders || 0
+      )
+      const todayBills = Math.max(
+        todayRevenueData.billsCount || 0,
+        Object.values(bills || {}).filter((bill) => {
+          if (!bill?.completedAt) return false
+          return new Date(bill.completedAt).toISOString().split('T')[0] === todayKey
+        }).length,
+        todayClosedOrders.length
+      )
       
       // Calculate weekly revenue from dailyRevenue collection
-      const weekAgo = new Date()
+      const weekAgo = new Date(now)
       weekAgo.setDate(weekAgo.getDate() - 7)
       
       let weeklyRevenue = 0
@@ -294,7 +320,7 @@ const Dashboard = () => {
       })
       
       // Calculate monthly revenue from dailyRevenue collection
-      const monthAgo = new Date()
+      const monthAgo = new Date(now)
       monthAgo.setMonth(monthAgo.getMonth() - 1)
       
       let monthlyRevenue = 0
@@ -328,7 +354,7 @@ const Dashboard = () => {
         monthlyRevenue,
         monthlyBills,
         avgOrderValue: Math.round(avgOrderValue),
-        totalBills: Object.keys(bills || {}).length,
+        totalBills: Object.values(dailyRevenue || {}).reduce((sum, day) => sum + (day?.billsCount || 0), 0),
         allItemsCount: allItems.length,
         notificationsCount: Object.keys(notifications || {}).length
       }
@@ -603,34 +629,14 @@ const Dashboard = () => {
   // Get kitchen status color and text
   const getKitchenStatus = () => {
     const { pendingItems, preparingItems, readyItems } = stats
+    const inProcess = pendingItems + preparingItems + readyItems
     
-    if (pendingItems === 0 && preparingItems === 0 && readyItems === 0) {
+    if (inProcess === 0) {
       return {
         text: 'Empty',
         color: 'gray',
         bgColor: 'bg-gray-50',
         iconColor: 'text-gray-600'
-      }
-    } else if (readyItems > preparingItems + pendingItems) {
-      return {
-        text: 'Ready',
-        color: 'emerald',
-        bgColor: 'bg-emerald-50',
-        iconColor: 'text-emerald-600'
-      }
-    } else if (preparingItems > pendingItems * 2) {
-      return {
-        text: 'Active',
-        color: 'blue',
-        bgColor: 'bg-blue-50',
-        iconColor: 'text-blue-600'
-      }
-    } else if (pendingItems > 5) {
-      return {
-        text: 'Busy',
-        color: 'amber',
-        bgColor: 'bg-amber-50',
-        iconColor: 'text-amber-600'
       }
     } else if (pendingItems > 10) {
       return {
@@ -639,12 +645,33 @@ const Dashboard = () => {
         bgColor: 'bg-red-50',
         iconColor: 'text-red-600'
       }
-    } else {
+    } else if (pendingItems > 5) {
       return {
-        text: 'Active',
+        text: 'Busy',
+        color: 'amber',
+        bgColor: 'bg-amber-50',
+        iconColor: 'text-amber-600'
+      }
+    } else if (readyItems >= preparingItems + pendingItems) {
+      return {
+        text: 'Ready',
         color: 'emerald',
         bgColor: 'bg-emerald-50',
         iconColor: 'text-emerald-600'
+      }
+    } else if (preparingItems > 0) {
+      return {
+        text: 'Active',
+        color: 'blue',
+        bgColor: 'bg-blue-50',
+        iconColor: 'text-blue-600'
+      }
+    } else {
+      return {
+        text: 'Pending',
+        color: 'amber',
+        bgColor: 'bg-amber-50',
+        iconColor: 'text-amber-600'
       }
     }
   }

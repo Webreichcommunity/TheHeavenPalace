@@ -1,199 +1,203 @@
-import React, { useState, useEffect } from 'react'
-import { ref, update, onValue, off, push } from 'firebase/database'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { off, onValue, push, ref, update } from 'firebase/database'
 import { database } from '../Firebase/config'
-import { Clock, ChefHat, CheckCircle, Play, Bell, Flame, TrendingUp, AlertCircle, Printer } from 'lucide-react'
+import { Bell, CheckCircle, ChefHat, Play, Printer } from 'lucide-react'
 import { printerService } from '../Components/printorder'
 
 const Kitchen = () => {
   const [orders, setOrders] = useState({})
-  const [lastUpdated, setLastUpdated] = useState(new Date())
-  const [activeOrderId, setActiveOrderId] = useState(null)
+  const previousOrderIdsRef = useRef(new Set())
 
   useEffect(() => {
     const ordersRef = ref(database, 'orders')
+
     onValue(ordersRef, (snapshot) => {
-      const data = snapshot.val()
-      if (data) {
-        setOrders(data)
-        setLastUpdated(new Date())
+      const data = snapshot.val() || {}
+      setOrders(data)
+
+      const activeOrders = Object.entries(data).filter(([, order]) => order.status === 'active')
+      const currentIds = new Set(activeOrders.map(([id]) => id))
+
+      if (previousOrderIdsRef.current.size > 0) {
+        const hasNewOrder = activeOrders.some(([id, order]) => {
+          const isNewSource =
+            order.isNew ||
+            order.isParcel ||
+            order.source === 'captain' ||
+            order.source === 'parcel'
+          return !previousOrderIdsRef.current.has(id) && isNewSource
+        })
+
+        if (hasNewOrder) playOrderBell()
       }
+
+      previousOrderIdsRef.current = currentIds
     })
 
     return () => off(ordersRef)
   }, [])
 
-  const toggleItemStatus = async (orderId, itemId, currentStatus) => {
-    const orderRef = ref(database, `orders/${orderId}`)
+  const playOrderBell = () => {
+    try {
+      const audioContext = new (window.AudioContext || window.webkitAudioContext)()
+      const oscillator = audioContext.createOscillator()
+      const gain = audioContext.createGain()
+
+      oscillator.connect(gain)
+      gain.connect(audioContext.destination)
+
+      oscillator.type = 'sine'
+      oscillator.frequency.setValueAtTime(860, audioContext.currentTime)
+      gain.gain.setValueAtTime(0.001, audioContext.currentTime)
+      gain.gain.exponentialRampToValueAtTime(0.25, audioContext.currentTime + 0.02)
+      gain.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.35)
+
+      oscillator.start(audioContext.currentTime)
+      oscillator.stop(audioContext.currentTime + 0.35)
+    } catch (error) {
+      console.error('Failed to play bell sound:', error)
+    }
+  }
+
+  const getCounts = (order) => {
+    const items = order.items || []
+    const pending = items.filter((item) => item.status === 'pending').length
+    const preparing = items.filter((item) => item.status === 'preparing').length
+    const ready = items.filter((item) => item.status === 'ready').length
+    return { pending, preparing, ready, total: items.length }
+  }
+
+  const startCookingOrder = async (orderId, shouldPrintKOT = false) => {
     const order = orders[orderId]
-    
     if (!order || !order.items) return
 
-    let newStatus = 'preparing'
-    let shouldNotify = false
-    
-    // Toggle logic: pending → preparing → ready
-    if (currentStatus === 'pending') {
-      newStatus = 'preparing'
-    } else if (currentStatus === 'preparing') {
-      newStatus = 'ready'
-      shouldNotify = true
-    } else {
-      return // Already ready
-    }
-    
+    const now = new Date().toISOString()
+    const updatedItems = order.items.map((item) =>
+      item.status === 'pending'
+        ? {
+            ...item,
+            status: 'preparing',
+            startedAt: item.startedAt || now,
+            updatedAt: now
+          }
+        : item
+    )
+
     try {
-      const updatedItems = order.items.map(item => 
-        item.id === itemId ? { 
-          ...item, 
-          status: newStatus, 
-          updatedAt: new Date().toISOString(),
-          startedAt: currentStatus === 'pending' ? new Date().toISOString() : item.startedAt,
-          completedAt: newStatus === 'ready' ? new Date().toISOString() : null
-        } : item
-      )
-      
-      await update(orderRef, {
+      await update(ref(database, `orders/${orderId}`), {
         items: updatedItems,
-        updatedAt: new Date().toISOString()
+        kotPrinted: shouldPrintKOT || !!order.kotPrinted,
+        kotPrintedAt: shouldPrintKOT ? now : order.kotPrintedAt || null,
+        startedCookingAt: order.startedCookingAt || now,
+        updatedAt: now
       })
 
-      // Send notification when item is marked as ready
-      if (shouldNotify) {
-        const item = order.items.find(i => i.id === itemId)
-        const notificationsRef = ref(database, 'notifications')
-        await push(notificationsRef, {
-          type: 'kitchen_complete',
-          message: `${item?.name || 'Item'} is ready for Table ${order.tableNumber}`,
-          tableNumber: order.tableNumber,
-          tableId: order.tableId,
-          orderId,
-          itemName: item?.name,
-          createdAt: new Date().toISOString(),
-          read: false
-        })
+      if (shouldPrintKOT) {
+        const orderItems = order.items.map((item) => ({
+          name: item.name,
+          quantity: item.quantity
+        }))
+        const tableDisplay = order.tableNumber || 'Parcel'
+        const orderNumber = order.orderNumber || orderId.slice(-4)
+        await printerService.printKOT(orderItems, tableDisplay, orderNumber)
       }
     } catch (error) {
-      console.error('Error updating item status:', error)
+      console.error('Error starting cooking:', error)
     }
   }
 
-  const startAllItems = async (orderId) => {
-    const orderRef = ref(database, `orders/${orderId}`)
+  const markOrderReady = async (orderId) => {
     const order = orders[orderId]
-    
+    if (!order || !order.items) return
+
+    const now = new Date().toISOString()
+
+    try {
+      const updatedItems = order.items.map((item) =>
+        item.status === 'ready'
+          ? item
+          : {
+              ...item,
+              status: 'ready',
+              updatedAt: now,
+              startedAt: item.startedAt || now,
+              completedAt: now
+            }
+      )
+
+      const orderUpdates = {
+        items: updatedItems,
+        updatedAt: now,
+        kitchenCompletedAt: now
+      }
+
+      if (order.isParcel) {
+        orderUpdates.parcelStatus = 'ready'
+        orderUpdates.readyAt = now
+      }
+
+      await update(ref(database, `orders/${orderId}`), orderUpdates)
+
+      await push(ref(database, 'notifications'), {
+        type: 'kitchen_complete',
+        message: `Order #${order.orderNumber || orderId.slice(-4)} is ready for ${order.tableNumber || 'Parcel'}`,
+        tableNumber: order.tableNumber || 'Parcel',
+        tableId: order.tableId || 'parcel',
+        orderId,
+        createdAt: now,
+        read: false
+      })
+    } catch (error) {
+      console.error('Error marking order ready:', error)
+    }
+  }
+
+  const printKOTOnly = async (orderId) => {
+    const order = orders[orderId]
     if (!order || !order.items) return
 
     try {
-      const updatedItems = order.items.map(item => 
-        item.status === 'pending' ? { 
-          ...item, 
-          status: 'preparing', 
-          updatedAt: new Date().toISOString(),
-          startedAt: new Date().toISOString()
-        } : item
-      )
-      
-      await update(orderRef, {
-        items: updatedItems,
-        updatedAt: new Date().toISOString()
-      })
-    } catch (error) {
-      console.error('Error starting all items:', error)
-    }
-  }
-
-  const getOrderProgress = (order) => {
-    const totalItems = order.items?.length || 0
-    const completedItems = order.items?.filter(item => item.status === 'ready').length || 0
-    return totalItems > 0 ? Math.round((completedItems / totalItems) * 100) : 0
-  }
-
-  const getKitchenStats = () => {
-    const allItems = Object.values(orders).flatMap(order => order.items || [])
-    const activeOrders = Object.values(orders).filter(order => order.status === 'active')
-    
-    return {
-      pending: allItems.filter(item => item.status === 'pending').length,
-      preparing: allItems.filter(item => item.status === 'preparing').length,
-      ready: allItems.filter(item => item.status === 'ready').length,
-      activeOrders: activeOrders.length
-    }
-  }
-
-  const getUrgentOrders = () => {
-    return Object.values(orders).filter(order => {
-      if (order.status !== 'active') return false
-      const pendingItems = order.items?.filter(item => item.status === 'pending').length || 0
-      return pendingItems > 2 // Consider urgent if more than 2 pending items
-    }).length
-  }
-
-  const getFilteredOrders = () => {
-    return Object.entries(orders)
-      .filter(([orderId, order]) => order.status === 'active')
-      .sort(([orderIdA, orderA], [orderIdB, orderB]) => {
-        const pendingA = orderA.items?.filter(item => item.status === 'pending').length || 0
-        const pendingB = orderB.items?.filter(item => item.status === 'pending').length || 0
-        // Sort by pending items (urgent first), then by preparation time
-        if (pendingB !== pendingA) return pendingB - pendingA
-        
-        const totalTimeA = orderA.items?.reduce((sum, item) => sum + (item.preparationTime || 0), 0) || 0
-        const totalTimeB = orderB.items?.reduce((sum, item) => sum + (item.preparationTime || 0), 0) || 0
-        return totalTimeA - totalTimeB
-      })
-  }
-
-  const getStatusColor = (status) => {
-    switch(status) {
-      case 'pending': return 'border-l-yellow-500'
-      case 'preparing': return 'border-l-blue-500'
-      case 'ready': return 'border-l-emerald-500'
-      default: return 'border-l-gray-400'
-    }
-  }
-
-  const getStatusText = (status) => {
-    switch(status) {
-      case 'pending': return 'Pending'
-      case 'preparing': return 'Cooking'
-      case 'ready': return 'Ready'
-      default: return status
-    }
-  }
-
-  // Print KOT (Kitchen Order Ticket)
-  const printKOT = async (order) => {
-    try {
-      const orderItems = order.items.map(item => ({
+      const tableDisplay = order.tableNumber || 'Parcel'
+      const orderNumber = order.orderNumber || orderId.slice(-4)
+      const orderItems = order.items.map((item) => ({
         name: item.name,
         quantity: item.quantity
       }))
 
-      const tableDisplay = order.tableNumber || 'Parcel'
-      const orderNumber = order.orderNumber || order.id.slice(-4)
-
-      await printerService.printKOT(
-        orderItems,
-        tableDisplay,
-        orderNumber,
-        {
-          onPrintStart: () => console.log('Starting KOT print...'),
-          onPrintComplete: () => console.log('KOT printed successfully'),
-          onPrintError: (error) => console.error('KOT print error:', error)
-        }
-      )
+      await printerService.printKOT(orderItems, tableDisplay, orderNumber)
+      await update(ref(database, `orders/${orderId}`), {
+        kotPrinted: true,
+        kotPrintedAt: new Date().toISOString()
+      })
     } catch (error) {
       console.error('Error printing KOT:', error)
     }
   }
 
-  const stats = getKitchenStats()
-  const filteredOrders = getFilteredOrders()
-  const urgentOrdersCount = getUrgentOrders()
+  const activeOrders = useMemo(
+    () =>
+      Object.entries(orders)
+        .filter(([, order]) => order.status === 'active')
+        .sort(([, a], [, b]) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0)),
+    [orders]
+  )
+
+  const stats = useMemo(() => {
+    const counts = { pending: 0, preparing: 0, ready: 0 }
+    activeOrders.forEach(([, order]) => {
+      const c = getCounts(order)
+      counts.pending += c.pending
+      counts.preparing += c.preparing
+      counts.ready += c.ready
+    })
+    return {
+      ...counts,
+      activeOrders: activeOrders.length
+    }
+  }, [activeOrders])
 
   return (
     <div className="min-h-screen mt-14 bg-gray-50">
-      {/* Header */}
       <div className="sticky top-0 z-30 bg-white border-b border-gray-100">
         <div className="max-w-7xl mx-auto px-4 py-3">
           <div className="flex items-center justify-between">
@@ -203,133 +207,121 @@ const Kitchen = () => {
               </div>
               <div>
                 <h1 className="text-xl font-semibold text-gray-900">Kitchen Display</h1>
-                <p className="text-xs text-gray-500">Live order management</p>
+                <p className="text-xs text-gray-500">Simple order workflow</p>
               </div>
             </div>
-            
-            <div className="flex items-center gap-4">
-              <div className="text-right">
-                <div className="text-xs text-gray-500">Active orders</div>
-                <div className="text-lg font-bold text-gray-900">{stats.activeOrders}</div>
-              </div>
+
+            <div className="flex items-center gap-2 text-xs">
+              <span className="px-2 py-1 rounded-lg bg-amber-100 text-amber-700">Pending: {stats.pending}</span>
+              <span className="px-2 py-1 rounded-lg bg-blue-100 text-blue-700">Cooking: {stats.preparing}</span>
+              <span className="px-2 py-1 rounded-lg bg-emerald-100 text-emerald-700">Ready: {stats.ready}</span>
+              <span className="px-2 py-1 rounded-lg bg-gray-100 text-gray-700">Orders: {stats.activeOrders}</span>
+              <button
+                onClick={playOrderBell}
+                className="px-2 py-1 rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors"
+                title="Test bell"
+              >
+                <Bell size={14} />
+              </button>
             </div>
           </div>
         </div>
       </div>
 
       <div className="max-w-7xl mx-auto p-4">
-        {/* Orders Grid */}
-        {filteredOrders.length > 0 ? (
-          <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
-            {filteredOrders.map(([orderId, order]) => {
-              const pendingItems = order.items?.filter(item => item.status === 'pending').length || 0
-              const preparingItems = order.items?.filter(item => item.status === 'preparing').length || 0
-              const readyItems = order.items?.filter(item => item.status === 'ready').length || 0
-              const isUrgent = pendingItems > 2
-              
+        {activeOrders.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            {activeOrders.map(([orderId, order]) => {
+              const { pending, preparing, ready, total } = getCounts(order)
+              const allStarted = pending === 0 && total > 0
+              const allReady = ready === total && total > 0
+
               return (
-                <div 
-                  key={orderId} 
-                  className={`bg-white rounded-xl border border-gray-200 overflow-hidden transition-all duration-300 ${
-                    isUrgent ? 'border-l-4 border-l-red-500' : ''
-                  }`}
-                >
-                  {/* Order Header */}
+                <div key={orderId} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
                   <div className="p-4 border-b border-gray-100">
                     <div className="flex items-center justify-between mb-3">
                       <div>
-                        <div className="flex items-center gap-2 mb-1">
-                          <h3 className="text-lg font-semibold text-gray-900">{order.tableNumber || 'Parcel'}</h3>
-                          {isUrgent && (
-                            <span className="px-2 py-1 bg-red-50 text-red-600 text-xs font-medium rounded-lg">
-                              Urgent
-                            </span>
-                          )}
-                        </div>
+                        <h3 className="text-lg font-semibold text-gray-900">{order.tableNumber || 'Parcel'}</h3>
                         <p className="text-sm text-gray-500">Order #{order.orderNumber || orderId.slice(-4)}</p>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => printKOT(order)}
-                          className="px-3 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors flex items-center gap-2"
-                        >
-                          <Printer size={16} />
-                          <span className="text-sm">Print KOT</span>
-                        </button>
+                      <div className="flex items-center gap-2 text-xs">
+                        {order.isParcel && <span className="px-2 py-1 rounded-lg bg-purple-100 text-purple-700">Parcel</span>}
+                        {order.kotPrinted && <span className="px-2 py-1 rounded-lg bg-blue-100 text-blue-700">KOT Printed</span>}
                       </div>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-2 text-xs mb-3">
+                      <div className="bg-amber-50 text-amber-700 rounded-lg px-2 py-1 text-center">Pending {pending}</div>
+                      <div className="bg-blue-50 text-blue-700 rounded-lg px-2 py-1 text-center">Cooking {preparing}</div>
+                      <div className="bg-emerald-50 text-emerald-700 rounded-lg px-2 py-1 text-center">Ready {ready}</div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      {!allStarted && (
+                        <button
+                          onClick={() => startCookingOrder(orderId, true)}
+                          className="flex-1 px-3 py-2 bg-red-600 text-white rounded-lg font-medium hover:bg-red-700 transition-colors flex items-center justify-center gap-2"
+                        >
+                          <Play size={16} />
+                          <span className="text-sm">Print KOT & Start Cooking</span>
+                        </button>
+                      )}
+
+                      {allStarted && !allReady && (
+                        <button
+                          onClick={() => markOrderReady(orderId)}
+                          className="flex-1 px-3 py-2 bg-emerald-600 text-white rounded-lg font-medium hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2"
+                        >
+                          <CheckCircle size={16} />
+                          <span className="text-sm">Food Ready</span>
+                        </button>
+                      )}
+
+                      {allReady && (
+                        <div className="flex-1 px-3 py-2 bg-emerald-100 text-emerald-700 rounded-lg font-medium text-center text-sm">
+                          Ready for Service
+                        </div>
+                      )}
+
+                      <button
+                        onClick={() => printKOTOnly(orderId)}
+                        className="px-3 py-2 bg-blue-50 text-blue-700 rounded-lg font-medium hover:bg-blue-100 transition-colors flex items-center gap-2"
+                        title="Print KOT"
+                      >
+                        <Printer size={16} />
+                      </button>
                     </div>
                   </div>
 
-                  {/* Items List */}
-                  <div className="p-4 max-h-80 overflow-y-auto">
-                    <div className="space-y-3">
-                      {order.items?.map((item, index) => (
-                        <div 
-                          key={item.id} 
-                          className={`p-3 rounded-lg border ${getStatusColor(item.status)} ${
-                            item.status === 'pending' ? 'bg-yellow-50' :
-                            item.status === 'preparing' ? 'bg-blue-50' :
-                            'bg-emerald-50'
-                          }`}
-                        >
-                          <div className="flex items-center justify-between mb-2">
-                            <div className="flex items-center gap-3">
-                              <span className="text-lg">{item.emoji}</span>
-                              <div>
-                                <h4 className="font-medium text-gray-900">{item.name}</h4>
-                                <div className="flex items-center gap-2 text-sm text-gray-500">
-                                  <span>{item.quantity}x</span>
-                                </div>
-                              </div>
-                            </div>
-                            <span className={`px-3 py-1 text-xs font-medium rounded-full ${
-                              item.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
-                              item.status === 'preparing' ? 'bg-blue-100 text-blue-700' :
-                              'bg-emerald-100 text-emerald-700'
-                            }`}>
-                              {getStatusText(item.status)}
-                            </span>
+                  <div className="p-4 space-y-2 max-h-80 overflow-y-auto">
+                    {order.items?.map((item) => (
+                      <div key={item.id} className="p-2 rounded-lg border border-gray-100">
+                        <div className="flex items-center justify-between text-sm">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span>{item.emoji}</span>
+                            <span className="font-medium text-gray-900 truncate">{item.name}</span>
+                            <span className="text-gray-500">x{item.quantity}</span>
                           </div>
-
-                          {/* Action Button */}
-                          <button
-                            onClick={() => toggleItemStatus(orderId, item.id, item.status)}
-                            className={`w-full py-2.5 rounded-lg font-medium transition-colors flex items-center justify-center gap-2 ${
-                              item.status === 'pending' 
-                                ? 'bg-red-600 text-white hover:bg-red-700' 
+                          <span
+                            className={`px-2 py-1 rounded-full text-xs font-medium ${
+                              item.status === 'pending'
+                                ? 'bg-amber-100 text-amber-700'
                                 : item.status === 'preparing'
-                                ? 'bg-emerald-600 text-white hover:bg-emerald-700'
-                                : 'bg-emerald-100 text-emerald-700 cursor-default'
+                                ? 'bg-blue-100 text-blue-700'
+                                : 'bg-emerald-100 text-emerald-700'
                             }`}
-                            disabled={item.status === 'ready'}
                           >
-                            {item.status === 'pending' ? (
-                              <>
-                                <Play size={16} />
-                                <span>Start Cooking</span>
-                              </>
-                            ) : item.status === 'preparing' ? (
-                              <>
-                                <CheckCircle size={16} />
-                                <span>Mark as Ready</span>
-                              </>
-                            ) : (
-                              <>
-                                <CheckCircle size={16} />
-                                <span>Ready for Service</span>
-                              </>
-                            )}
-                          </button>
+                            {item.status === 'pending' ? 'Pending' : item.status === 'preparing' ? 'Cooking' : 'Ready'}
+                          </span>
                         </div>
-                      ))}
-                    </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
               )
             })}
           </div>
         ) : (
-          /* Empty State */
           <div className="bg-white rounded-xl border border-gray-200 p-8 text-center">
             <div className="w-16 h-16 mx-auto bg-gray-100 rounded-full flex items-center justify-center mb-4">
               <ChefHat size={24} className="text-gray-400" />
@@ -341,27 +333,6 @@ const Kitchen = () => {
           </div>
         )}
       </div>
-
-      <style jsx>{`
-        /* Custom scrollbar */
-        ::-webkit-scrollbar {
-          width: 4px;
-        }
-
-        ::-webkit-scrollbar-track {
-          background: #f1f1f1;
-          border-radius: 2px;
-        }
-
-        ::-webkit-scrollbar-thumb {
-          background: #c1c1c1;
-          border-radius: 2px;
-        }
-
-        ::-webkit-scrollbar-thumb:hover {
-          background: #a1a1a1;
-        }
-      `}</style>
     </div>
   )
 }

@@ -663,17 +663,14 @@ const Billing = () => {
 
   const completeBillingProcess = async () => {
     if (!finalBill) return
-    
-    if (!paymentMode) {
-      setShowPaymentModal(true)
-      return
-    }
-    
-    await handleCompleteBilling()
+
+    setPaymentMode((prev) => prev || 'Cash')
+    setShowPaymentModal(true)
   }
 
   const handleCompleteBilling = async () => {
     if (!finalBill) return
+    if (!paymentMode) return
 
     setIsProcessingPayment(true)
 
@@ -719,6 +716,7 @@ const Billing = () => {
     } finally {
       setIsProcessingPayment(false)
       setShowPaymentModal(false)
+      setPaymentMode('')
     }
   }
 
@@ -727,6 +725,7 @@ const Billing = () => {
     
     setFinalBill(bill)
     setActiveTab('current')
+    setPaymentMode('Cash')
     setShowPaymentModal(true)
   }
 
@@ -747,6 +746,8 @@ const Billing = () => {
 
   const unpaidBills = billHistory.filter(bill => bill.paymentStatus !== 'paid')
   const paidBills = [...localBillHistory]
+  const visibleUnpaidBills = filteredBills(unpaidBills)
+  const visiblePaidBills = filteredBills(paidBills)
   const totals = finalBill ? calculateTotals(finalBill) : { subtotal: 0, tax: 0, total: 0 }
 
   const groupBillsByDate = (bills) => {
@@ -882,6 +883,33 @@ const Billing = () => {
               History
             </button>
           </div>
+
+          {(activeTab === 'unpaid' || activeTab === 'history') && (
+            <div className="bg-white rounded-xl border p-4 mb-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="relative">
+                  <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <input
+                    type="text"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    placeholder="Search bill no or table"
+                    className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-red-500"
+                  />
+                </div>
+                <select
+                  value={filterTable}
+                  onChange={(e) => setFilterTable(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-red-500"
+                >
+                  <option value="">All tables</option>
+                  {[...new Set([...unpaidBills, ...paidBills].map((bill) => bill.tableNumber).filter(Boolean))].map((table) => (
+                    <option key={table} value={table}>{table}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          )}
 
           {/* Current Bill View */}
           {activeTab === 'current' && (
@@ -1023,14 +1051,17 @@ const Billing = () => {
           {/* Unpaid Bills View */}
           {activeTab === 'unpaid' && (
             <div className="space-y-4">
-              {unpaidBills.length > 0 ? (
-                unpaidBills.map((bill) => (
+              {visibleUnpaidBills.length > 0 ? (
+                visibleUnpaidBills.map((bill) => (
                   <div key={bill.id} className="bg-white rounded-xl shadow-sm border p-5 hover:shadow-md transition-shadow">
                     <div className="flex items-center justify-between mb-3">
                       <div>
                         <div className="flex items-center gap-2 mb-1">
                           <div className="text-lg font-bold text-gray-900">Bill #{bill.billNumber}</div>
                           <div className="px-2 py-1 bg-red-100 text-red-700 rounded text-xs font-medium">Unpaid</div>
+                          {bill.isParcel && (
+                            <div className="px-2 py-1 bg-purple-100 text-purple-700 rounded text-xs font-medium">Parcel</div>
+                          )}
                         </div>
                         <div className="flex items-center gap-4 text-sm text-gray-600">
                           <div className="flex items-center gap-1">
@@ -1069,8 +1100,8 @@ const Billing = () => {
               ) : (
                 <div className="bg-white rounded-xl shadow-sm border p-8 text-center">
                   <CheckCircle className="w-16 h-16 text-emerald-300 mx-auto mb-4" />
-                  <h3 className="text-lg font-medium text-gray-700 mb-2">All Bills Paid!</h3>
-                  <p className="text-gray-500">No unpaid bills found</p>
+                  <h3 className="text-lg font-medium text-gray-700 mb-2">No Matching Unpaid Bills</h3>
+                  <p className="text-gray-500">Try clearing search or table filter</p>
                 </div>
               )}
             </div>
@@ -1079,8 +1110,8 @@ const Billing = () => {
           {/* History View */}
           {activeTab === 'history' && (
             <div className="space-y-6">
-              {paidBills.length > 0 ? (
-                Object.entries(groupBillsByDate(paidBills)).map(([date, bills]) => (
+              {visiblePaidBills.length > 0 ? (
+                Object.entries(groupBillsByDate(visiblePaidBills)).map(([date, bills]) => (
                   <div key={date}>
                     <div className="flex items-center gap-2 mb-4">
                       <Calendar className="text-red-600" size={18} />
@@ -1097,6 +1128,9 @@ const Billing = () => {
                               <div className="flex items-center gap-2 mb-1">
                                 <div className="text-lg font-bold text-gray-900">Bill #{bill.billNumber}</div>
                                 <div className="px-2 py-1 bg-emerald-100 text-emerald-700 rounded text-xs font-medium">Paid</div>
+                                {bill.isParcel && (
+                                  <div className="px-2 py-1 bg-purple-100 text-purple-700 rounded text-xs font-medium">Parcel</div>
+                                )}
                                 {bill.paymentMode && (
                                   <div className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs font-medium">
                                     {bill.paymentMode}
@@ -1135,8 +1169,8 @@ const Billing = () => {
               ) : (
                 <div className="bg-white rounded-xl shadow-sm border p-8 text-center">
                   <History className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                  <h3 className="text-lg font-medium text-gray-700 mb-2">No Bill History</h3>
-                  <p className="text-gray-500">Paid bills will appear here</p>
+                  <h3 className="text-lg font-medium text-gray-700 mb-2">No Matching Bill History</h3>
+                  <p className="text-gray-500">Try clearing search or table filter</p>
                 </div>
               )}
             </div>

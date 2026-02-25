@@ -13,14 +13,14 @@ const firebaseConfig = {
   messagingSenderId: "545354611605",
   appId: "1:545354611605:web:222c3c8b1d7b0b43d6149c"
 
-    // apiKey: "AIzaSyBzBQalOS_LOjbvNsYOO5RmI3cKHJcmpAE",
-    // authDomain: "dmcdemo-ccfba.firebaseapp.com",
-    // databaseURL: "https://dmcdemo-ccfba-default-rtdb.firebaseio.com",
-    // projectId: "dmcdemo-ccfba",
-    // storageBucket: "dmcdemo-ccfba.firebasestorage.app",
-    // messagingSenderId: "11141322598",
-    // appId: "1:11141322598:web:7ec06295a85852d1925aa7",
-    // databaseURL: "https://dmcdemo-ccfba-default-rtdb.firebaseio.com/"
+  // apiKey: "AIzaSyBzBQalOS_LOjbvNsYOO5RmI3cKHJcmpAE",
+  // authDomain: "dmcdemo-ccfba.firebaseapp.com",
+  // databaseURL: "https://dmcdemo-ccfba-default-rtdb.firebaseio.com",
+  // projectId: "dmcdemo-ccfba",
+  // storageBucket: "dmcdemo-ccfba.firebasestorage.app",
+  // messagingSenderId: "11141322598",
+  // appId: "1:11141322598:web:7ec06295a85852d1925aa7",
+  // databaseURL: "https://dmcdemo-ccfba-default-rtdb.firebaseio.com/"
 };
 
 const app = initializeApp(firebaseConfig)

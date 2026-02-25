@@ -49,7 +49,6 @@ const ParcelPage = () => {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [orderToDelete, setOrderToDelete] = useState(null)
   const [isConnecting, setIsConnecting] = useState(false)
-  const [isPrinting, setIsPrinting] = useState(false)
   
   // Enhanced search state
   const [showSuggestions, setShowSuggestions] = useState(false)
@@ -483,46 +482,6 @@ const ParcelPage = () => {
     }
   }
 
-  // Print order to thermal printer
-  const printOrderToPrinter = async (orderData) => {
-    if (!globalBluetoothConnection.connected) {
-      // Try to connect first
-      const connected = await printerService.connectBluetooth()
-      if (!connected) {
-        // Fallback to browser print
-        printerService.fallbackPrintOrder(orderData, 'Parcel', orderData.orderNumber)
-        return false
-      }
-    }
-
-    setIsPrinting(true)
-    try {
-      await printerService.printOrderReceipt(
-        orderData,
-        'Parcel',
-        orderData.orderNumber,
-        {
-          onPrintStart: () => console.log('Printing started...'),
-          onPrintComplete: () => {
-            console.log('Print completed successfully')
-            setIsPrinting(false)
-          },
-          onPrintError: (error) => {
-            console.error('Print error:', error)
-            setIsPrinting(false)
-            setError('Print failed, check printer connection')
-            setTimeout(() => setError(null), 3000)
-          }
-        }
-      )
-      return true
-    } catch (error) {
-      console.error('Print error:', error)
-      setIsPrinting(false)
-      return false
-    }
-  }
-
   // Submit parcel order with print functionality
   const submitParcelOrder = async () => {
     if (selectedItems.length === 0) {
@@ -570,9 +529,6 @@ const ParcelPage = () => {
         createdAt: new Date().toISOString(),
         read: false
       })
-
-      // Print order to thermal printer
-      await printOrderToPrinter(orderData)
 
       setIsOrderPlaced(true)
       setShowOrderSummary(false)
@@ -742,6 +698,93 @@ const ParcelPage = () => {
     }
   }
 
+  const renderParcelReadyModal = () => (
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl w-full max-w-md p-6 border border-gray-200 shadow-xl">
+        <h3 className="text-lg font-semibold text-gray-900 mb-2">Mark Parcel Ready</h3>
+        <p className="text-sm text-gray-600 mb-6">
+          Confirm that parcel order #{selectedParcelOrder?.orderNumber || ''} is ready for handover.
+        </p>
+        <div className="flex justify-end gap-2">
+          <button
+            onClick={() => {
+              setShowParcelReadyModal(false)
+              setSelectedParcelOrder(null)
+            }}
+            className="px-4 py-2 text-sm rounded-lg border border-gray-200 hover:bg-gray-50"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() => selectedParcelOrder && markParcelReady(selectedParcelOrder.id)}
+            disabled={loading}
+            className="px-4 py-2 text-sm rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50"
+          >
+            Confirm Ready
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+
+  const renderSendToBillModal = () => (
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl w-full max-w-md p-6 border border-gray-200 shadow-xl">
+        <h3 className="text-lg font-semibold text-gray-900 mb-2">Send to Billing</h3>
+        <p className="text-sm text-gray-600 mb-6">
+          Send parcel order #{selectedParcelOrder?.orderNumber || ''} to billing counter now?
+        </p>
+        <div className="flex justify-end gap-2">
+          <button
+            onClick={() => {
+              setShowSendToBillModal(false)
+              setSelectedParcelOrder(null)
+            }}
+            className="px-4 py-2 text-sm rounded-lg border border-gray-200 hover:bg-gray-50"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() => selectedParcelOrder && sendParcelToBillCounter(selectedParcelOrder.id)}
+            disabled={loading}
+            className="px-4 py-2 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+          >
+            Confirm Send
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+
+  const renderDeleteConfirmModal = () => (
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl w-full max-w-md p-6 border border-gray-200 shadow-xl">
+        <h3 className="text-lg font-semibold text-gray-900 mb-2">Delete Parcel Order</h3>
+        <p className="text-sm text-gray-600 mb-6">
+          Delete order #{orderToDelete?.orderNumber || ''}? This cannot be undone.
+        </p>
+        <div className="flex justify-end gap-2">
+          <button
+            onClick={() => {
+              setShowDeleteConfirm(false)
+              setOrderToDelete(null)
+            }}
+            className="px-4 py-2 text-sm rounded-lg border border-gray-200 hover:bg-gray-50"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={deleteParcelOrder}
+            disabled={loading}
+            className="px-4 py-2 text-sm rounded-lg bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
+          >
+            Delete
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+
   const addToOrder = (item) => {
     const existingItem = selectedItems.find(i => i.id === item.id)
     if (existingItem) {
@@ -899,7 +942,7 @@ const ParcelPage = () => {
           connected={globalBluetoothConnection.connected}
           onConnect={connectBluetooth}
           onDisconnect={disconnectBluetooth}
-          isPrinting={isPrinting || isConnecting}
+          isPrinting={isConnecting}
         />
       </div>
 
@@ -1030,7 +1073,9 @@ const ParcelPage = () => {
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                   {parcelOrders.map(order => {
-                    const isReady = order.parcelStatus === 'ready'
+                    const isKitchenReady = (order.items || []).length > 0 &&
+                      (order.items || []).every(item => item.status === 'ready')
+                    const isReady = order.parcelStatus === 'ready' || isKitchenReady
                     const isSentToBill = order.parcelStatus === 'sent_to_bill'
                     
                     return (
@@ -1079,12 +1124,12 @@ const ParcelPage = () => {
                           {/* Status and Actions */}
                           <div className="flex items-center justify-between pt-3 border-t border-gray-100">
                             <div className="flex items-center gap-2">
-                              {order.parcelStatus === 'preparing' && (
+                              {order.parcelStatus === 'preparing' && !isKitchenReady && (
                                 <span className="text-xs font-medium bg-amber-100 text-amber-700 px-2 py-1 rounded-full">
                                   🕐 Preparing
                                 </span>
                               )}
-                              {order.parcelStatus === 'ready' && (
+                              {isReady && (
                                 <span className="text-xs font-medium bg-emerald-100 text-emerald-700 px-2 py-1 rounded-full">
                                   ✓ Ready
                                 </span>
@@ -1111,7 +1156,7 @@ const ParcelPage = () => {
                                 </button>
                               )}
                               
-                              {order.parcelStatus === 'preparing' && (
+                              {order.parcelStatus === 'preparing' && !isKitchenReady && (
                                 <button
                                   onClick={() => {
                                     setSelectedParcelOrder(order)
@@ -1124,7 +1169,7 @@ const ParcelPage = () => {
                                 </button>
                               )}
                               
-                              {order.parcelStatus === 'ready' && (
+                              {isReady && !isSentToBill && (
                                 <button
                                   onClick={() => {
                                     setSelectedParcelOrder(order)
@@ -1319,16 +1364,11 @@ const ParcelPage = () => {
                   </button>
                   <button
                     onClick={submitParcelOrder}
-                    disabled={loading || isPrinting}
+                    disabled={loading}
                     className="px-5 py-2.5 bg-emerald-600 text-white rounded-xl font-medium hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                   >
                     {loading ? (
                       <Loader2 size={16} className="animate-spin" />
-                    ) : isPrinting ? (
-                      <>
-                        <Loader2 size={16} className="animate-spin" />
-                        <span>Printing...</span>
-                      </>
                     ) : (
                       <>
                         <Send size={16} />
