@@ -72,7 +72,6 @@ const OrderManager = ({
   const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1)
   const searchInputRef = useRef(null)
   const suggestionsContainerRef = useRef(null)
-  const selectedSuggestionRef = useRef(null)
 
   // Filter menu items based on search and category
   const filteredMenuItems = useMemo(() => {
@@ -167,7 +166,7 @@ const OrderManager = ({
   }
 
   const updateQuantity = (itemId, quantity) => {
-    if (quantity === 0) {
+    if (quantity <= 0) {
       removeFromOrder(itemId)
     } else {
       setSelectedItems(selectedItems.map(item =>
@@ -275,7 +274,7 @@ const OrderManager = ({
   const getTableOrders = (tableId) => {
     if (!tableId || !activeOrders) return []
     return Object.entries(activeOrders)
-      .filter(([orderId, order]) => order.tableId === tableId && order.status === 'active')
+      .filter(([, order]) => order.tableId === tableId && order.status === 'active')
       .map(([orderId, order]) => ({ id: orderId, ...order }))
   }
 
@@ -392,7 +391,7 @@ const OrderManager = ({
   //             <div className="flex items-center gap-2 text-sm text-gray-500">
   //               <Clock size={14} />
   //               <span>{item.preparationTime} min</span>
-  //               {item.spicy && <span className="text-red-500">🌶️</span>}
+  //               {item.spicy && <span className="text-red-500">Spicy</span>}
   //             </div>
   //           </div>
   //           <div className="text-right">
@@ -447,22 +446,17 @@ const OrderManager = ({
         if (inCart && inCart.quantity > 0.5) {
             handleQuantityChange(item.id, "minus", inCart.quantity)
         } else if (inCart && inCart.quantity <= 0.5) {
-            // Remove from cart when quantity is 0.5 or less
-            handleQuantityChange(item.id, "remove", inCart.quantity)
+            removeFromOrder(item.id)
         }
     }
 
     return (
         <div
             key={item.id}
-            className="bg-white rounded-xl border border-gray-200 hover:border-emerald-300 transition-colors overflow-hidden flex flex-col md:flex-row min-h-[140px] md:min-h-0"
+            className="menu-row"
         >
             {/* Left side - Emoji and info */}
             <div className="flex p-4 md:p-3 md:flex-1">
-                <div className="mr-3 md:mr-4 flex-shrink-0">
-                    <span className="text-3xl md:text-2xl block">{item.emoji}</span>
-                </div>
-                
                 <div className="flex-1 min-w-0">
                     <div className="flex flex-wrap items-center gap-1.5 md:gap-2 mb-1.5">
                         <h3 className="font-semibold text-gray-900 text-base md:text-sm truncate">
@@ -478,7 +472,7 @@ const OrderManager = ({
                     <div className="flex items-center gap-1.5 text-sm md:text-xs text-gray-500 mb-2">
                         <Clock size={12} className="flex-shrink-0" />
                         <span>{item.preparationTime} min</span>
-                        {item.spicy && <span className="text-red-500 ml-1">🌶️</span>}
+                        {item.spicy && <span className="font-medium text-red-600 ml-1">Spicy</span>}
                     </div>
                     
                     <div className="font-bold text-emerald-600 text-lg md:text-base">
@@ -488,7 +482,7 @@ const OrderManager = ({
             </div>
 
             {/* Right side - Quantity controls or Add button */}
-            <div className="border-t md:border-t-0 md:border-l border-gray-100 p-4 md:p-3 flex-shrink-0">
+            <div className="flex-shrink-0">
                 {inCart ? (
                     <div className="flex items-center justify-between md:flex-col md:items-end md:gap-2">
                         <div className="flex items-center gap-3 md:gap-2">
@@ -557,7 +551,6 @@ const OrderManager = ({
       >
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3 flex-1">
-            <span className="text-xl">{item.emoji}</span>
             <div className="flex-1">
               <div className="flex items-center gap-2 mb-1">
                 <h4 className={`font-semibold ${isSelected ? 'text-white' : 'text-gray-900'}`}>
@@ -714,7 +707,6 @@ const OrderManager = ({
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3 flex-1">
-                    <span className="text-xl">{item.emoji}</span>
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-1">
                         <h4 className="font-medium text-gray-800">{item.name}</h4>
@@ -728,7 +720,7 @@ const OrderManager = ({
                           {item.preparationTime} min
                         </span>
                         <span>₹{item.price}</span>
-                        {item.spicy && <span className="text-red-500">🌶️</span>}
+                        {item.spicy && <span className="font-medium text-red-600">Spicy</span>}
                         {item.popular && (
                           <span className="bg-yellow-100 text-yellow-700 text-xs px-2 py-0.5 rounded-full">
                             Popular
@@ -783,8 +775,8 @@ const OrderManager = ({
   }
 
   const renderOrderSummaryModal = () => (
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white/95 backdrop-blur-sm rounded-2xl w-full max-w-md border border-gray-200/80 shadow-2xl">
+    <div className="app-modal-backdrop">
+      <div className="app-modal">
         <div className="p-5 border-b border-gray-100 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-emerald-50 rounded-xl flex items-center justify-center">
@@ -808,7 +800,6 @@ const OrderManager = ({
             {selectedItems.map(item => (
               <div key={item.id} className="flex items-center justify-between p-3 bg-white border border-gray-100 rounded-xl">
                 <div className="flex items-center gap-3">
-                  <span className="text-xl">{item.emoji}</span>
                   <div>
                     <p className="font-medium text-gray-800">{item.name}</p>
                     <p className="text-sm text-gray-500">₹{item.price} × {item.quantity}</p>
@@ -878,8 +869,8 @@ const OrderManager = ({
   )
 
   const renderCancelOrderModal = () => (
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white/95 backdrop-blur-sm rounded-2xl w-full max-w-md border border-gray-200/80 shadow-2xl">
+    <div className="app-modal-backdrop">
+      <div className="app-modal">
         <div className="p-5 border-b border-gray-100 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-red-50 rounded-xl flex items-center justify-center">
@@ -949,8 +940,8 @@ const OrderManager = ({
   )
 
   const renderEditOrderModal = () => (
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white/95 backdrop-blur-sm rounded-2xl w-full max-w-md border border-gray-200/80 shadow-2xl">
+    <div className="app-modal-backdrop" style={{ zIndex: 90 }}>
+      <div className="app-modal app-modal-lg">
         <div className="p-5 border-b border-gray-100 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center">
@@ -977,7 +968,6 @@ const OrderManager = ({
             {editItems.map((item, index) => (
               <div key={`${item.id}-${index}`} className="flex items-center justify-between p-3 bg-white border border-gray-100 rounded-xl">
                 <div className="flex items-center gap-3">
-                  <span className="text-xl">{item.emoji}</span>
                   <div>
                     <p className="font-medium text-gray-800">{item.name}</p>
                     <p className="text-sm text-gray-500">₹{item.price} × {item.quantity}</p>
@@ -1065,8 +1055,8 @@ const OrderManager = ({
   )
 
   const renderCompleteOrderModal = () => (
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white/95 backdrop-blur-sm rounded-2xl w-full max-w-2xl border border-gray-200/80 shadow-2xl">
+    <div className="app-modal-backdrop">
+      <div className="app-modal app-modal-lg">
         <div className="p-5 border-b border-gray-100 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-red-100 rounded-xl flex items-center justify-center">
@@ -1096,6 +1086,7 @@ const OrderManager = ({
                       <button
                         onClick={() => {
                           setOrderToEdit(order)
+                          setShowCompleteOrderModal(false)
                           setShowEditOrderModal(true)
                         }}
                         className="w-5 h-5 bg-blue-50 hover:bg-blue-100 rounded-lg flex items-center justify-center transition-colors"
@@ -1311,7 +1302,7 @@ const OrderManager = ({
                 Object.keys(filteredMenuItems).map(category => (
                   <div key={category}>
                     <h3 className="text-lg font-semibold text-gray-900 mb-3 px-2">{category}</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-2">
                       {filteredMenuItems[category]?.map(item => renderMenuItemCard(item))}
                     </div>
                   </div>
@@ -1326,7 +1317,7 @@ const OrderManager = ({
             </div>
           ) : (
             // Show specific category
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-2">
               {filteredMenuItems[activeCategory]?.length > 0 ? (
                 filteredMenuItems[activeCategory]?.map(item => renderMenuItemCard(item))
               ) : (
@@ -1368,6 +1359,7 @@ const OrderManager = ({
                       <button
                         onClick={() => {
                           setOrderToEdit(order)
+                          setShowCompleteOrderModal(false)
                           setShowEditOrderModal(true)
                         }}
                         className="w-5 h-5 bg-blue-50 hover:bg-blue-100 rounded-lg flex items-center justify-center transition-colors"
@@ -1401,8 +1393,8 @@ const OrderManager = ({
       {/* Bottom Action Bar */}
       <div className="sticky bottom-0 border-t border-gray-100 bg-white/95 backdrop-blur-sm">
         <div className="p-4">
-          <div className="flex items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex min-w-0 flex-wrap items-center gap-3">
               {selectedItems.length > 0 ? (
                 <>
                   <div className="w-10 h-10 bg-emerald-100 rounded-xl flex items-center justify-center">
@@ -1451,3 +1443,4 @@ const OrderManager = ({
 }
 
 export default OrderManager
+

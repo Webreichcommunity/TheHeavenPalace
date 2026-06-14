@@ -1,1 +1,82 @@
 @import "tailwindcss";
+
+body {
+   margin: 0;
+   background: #f8fafc;
+   color: #111827;
+   font-family: "Noto Sans", sans-serif;
+   -webkit-font-smoothing: antialiased;
+}
+
+button,
+input,
+select,
+textarea {
+   font: inherit;
+}
+
+button {
+   touch-action: manipulation;
+}
+
+.app-modal-backdrop {
+   position: fixed;
+   inset: 0;
+   z-index: 80;
+   display: flex;
+   align-items: center;
+   justify-content: center;
+   padding: 1rem;
+   background: rgb(15 23 42 / 0.55);
+   backdrop-filter: blur(4px);
+}
+
+.app-modal {
+   width: 100%;
+   max-width: 36rem;
+   max-height: min(86vh, 52rem);
+   overflow: hidden;
+   border: 1px solid #e5e7eb;
+   border-radius: 1rem;
+   background: #fff;
+   box-shadow: 0 24px 64px rgb(15 23 42 / 0.22);
+}
+
+.app-modal-lg {
+   max-width: 44rem;
+}
+
+.menu-row {
+   display: grid;
+   grid-template-columns: minmax(0, 1fr) auto;
+   align-items: center;
+   gap: .75rem;
+   min-height: 4.25rem;
+   padding: .75rem;
+   border: 1px solid #e5e7eb;
+   border-radius: .75rem;
+   background: #fff;
+}
+
+.menu-row:hover {
+   border-color: #a7f3d0;
+   background: #fafffc;
+}
+
+@media (max-width: 640px) {
+   .app-modal-backdrop {
+      align-items: flex-end;
+      padding: 0;
+   }
+
+   .app-modal {
+      max-height: 92vh;
+      border-radius: 1rem 1rem 0 0;
+   }
+
+   .menu-row {
+      gap: .5rem;
+      min-height: 3.75rem;
+      padding: .625rem;
+   }
+}

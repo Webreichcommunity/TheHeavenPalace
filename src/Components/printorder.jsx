@@ -274,7 +274,7 @@ class PrinterService {
           border-radius:4px;
         ">
           <div style="font-weight:bold; font-size:12px; color:#d97706; margin-bottom:4px;">
-            🕒 PREPARATION TIME: 15-20 MINUTES
+            PREPARATION TIME: 15-20 MINUTES
           </div>
           <div style="font-size:11px; color:#78350f;">
             • Check special instructions<br>

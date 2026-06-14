@@ -96,7 +96,7 @@ function App() {
           userRole={userRole}
           onLogout={handleLogout}
         />
-        <main className="flex-1 overflow-auto p-4 bg-gray-50">
+        <main className="flex-1 overflow-auto bg-slate-50 pt-16">
           <Routes>
             <Route path="/login" element={<Navigate to="/" replace />} />
 
@@ -153,7 +153,7 @@ function App() {
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
 
-          <div className="w-full flex bg-gray-200 p-2 rounded-2xl items-center gap-2  mt-6  justify-between">
+          <div className="mx-4 mb-4 flex items-center justify-between gap-2 rounded-xl border border-gray-200 bg-white p-2">
             <img src="https://webreichtech.vercel.app/logo.png" alt="" className='w-6 h-6' />
             <h3 className=' text-gray-800 text-sm font-thin'>WebReich Solution</h3>
           </div>
@@ -166,3 +166,4 @@ function App() {
 }
 
 export default App
+

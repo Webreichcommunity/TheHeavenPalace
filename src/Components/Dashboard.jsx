@@ -34,6 +34,14 @@ import {
   IndianRupee
 } from 'lucide-react'
 
+const getLocalDateKey = (value = new Date()) => {
+  const date = value instanceof Date ? value : new Date(value)
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
 const Dashboard = () => {
   const navigate = useNavigate()
   const [tables, setTables] = useState([])
@@ -135,16 +143,10 @@ const Dashboard = () => {
   const updateDailyRevenue = (billsData) => {
     try {
       const today = new Date()
-      const todayKey = today.toISOString().split('T')[0] // Format: YYYY-MM-DD
+      const todayKey = getLocalDateKey(today)
       
       // Check if it's after 2 AM, reset if needed
       const currentHour = today.getHours()
-      const currentDate = today.getDate()
-      
-      // Get yesterday's date key
-      const yesterday = new Date()
-      yesterday.setDate(yesterday.getDate() - 1)
-      const yesterdayKey = yesterday.toISOString().split('T')[0]
       
       // If it's after 2 AM and we haven't reset yet for today
       if (currentHour >= 2 && currentHour < 3) {
@@ -161,7 +163,7 @@ const Dashboard = () => {
       Object.values(billsData || {}).forEach(bill => {
         if (bill.completedAt) {
           const billDate = new Date(bill.completedAt)
-          const billDateKey = billDate.toISOString().split('T')[0]
+          const billDateKey = getLocalDateKey(billDate)
           
           if (billDateKey === todayKey) {
             const total = bill.finalTotal || bill.total || 0
@@ -240,7 +242,7 @@ const Dashboard = () => {
   const getStats = () => {
     try {
       const now = new Date()
-      const todayKey = now.toISOString().split('T')[0]
+      const todayKey = getLocalDateKey(now)
 
       // Convert orders object to array with ids
       const ordersArray = Object.entries(orders || {}).map(([id, order]) => ({
@@ -277,7 +279,7 @@ const Dashboard = () => {
 
       const todayRevenueFromBills = Object.values(bills || {}).reduce((sum, bill) => {
         if (!bill?.completedAt) return sum
-        return new Date(bill.completedAt).toISOString().split('T')[0] === todayKey
+        return getLocalDateKey(bill.completedAt) === todayKey
           ? sum + (bill.finalTotal || bill.total || 0)
           : sum
       }, 0)
@@ -285,7 +287,7 @@ const Dashboard = () => {
       // Fallback when billing records are cleared after payment
       const todayClosedOrders = ordersArray.filter(order => {
         if (!order?.closedAt || order.status !== 'closed') return false
-        return new Date(order.closedAt).toISOString().split('T')[0] === todayKey
+        return getLocalDateKey(order.closedAt) === todayKey
       })
       const todayRevenueFromOrders = todayClosedOrders.reduce((sum, order) => sum + (order.total || 0), 0)
 
@@ -299,7 +301,7 @@ const Dashboard = () => {
         todayRevenueData.billsCount || 0,
         Object.values(bills || {}).filter((bill) => {
           if (!bill?.completedAt) return false
-          return new Date(bill.completedAt).toISOString().split('T')[0] === todayKey
+          return getLocalDateKey(bill.completedAt) === todayKey
         }).length,
         todayClosedOrders.length
       )
@@ -502,13 +504,13 @@ const Dashboard = () => {
     
     // Get today's bills grouped by table
     const today = new Date()
-    const todayKey = today.toISOString().split('T')[0]
+    const todayKey = getLocalDateKey(today)
     
     Object.values(bills || {}).forEach(bill => {
       if (!bill.completedAt) return
       
       const billDate = new Date(bill.completedAt)
-      const billDateKey = billDate.toISOString().split('T')[0]
+      const billDateKey = getLocalDateKey(billDate)
       
       if (billDateKey === todayKey) {
         const table = bill.tableNumber || 'Unknown'
@@ -542,7 +544,7 @@ const Dashboard = () => {
   // Get revenue for selected time period
   const getFilteredRevenue = () => {
     const today = new Date()
-    const todayKey = today.toISOString().split('T')[0]
+    const todayKey = getLocalDateKey(today)
     
     switch (timeFilter) {
       case 'today':
@@ -584,7 +586,7 @@ const Dashboard = () => {
   // Get bills count for selected time period
   const getFilteredBills = () => {
     const today = new Date()
-    const todayKey = today.toISOString().split('T')[0]
+    const todayKey = getLocalDateKey(today)
     
     switch (timeFilter) {
       case 'today':
@@ -679,7 +681,7 @@ const Dashboard = () => {
   const kitchenStatus = getKitchenStatus()
 
   return (
-    <div className="min-h-screen mt-10 bg-gradient-to-br from-gray-50 to-gray-100/50 p-4 md:p-6">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100/50 p-4 md:p-6">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
@@ -734,7 +736,7 @@ const Dashboard = () => {
                 Avg: ₹{stats.avgOrderValue.toLocaleString()}
               </span>
               <span className={`text-xs font-medium px-2 py-1 rounded-full ${stats.todayRevenue > 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-600'}`}>
-                {stats.todayRevenue > 0 ? '💰 Active' : 'No sales'}
+                {stats.todayRevenue > 0 ? 'Active' : 'No sales'}
               </span>
             </div>
           </div>
@@ -830,53 +832,27 @@ const Dashboard = () => {
 
         {/* Main Content */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
-          {/* Quick Actions & Top Performers */}
+          {/* Operational overview */}
           <div className="lg:col-span-1 space-y-4">
-            {/* Quick Actions */}
             <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-gray-200/50 shadow-sm p-4 h-full hover:shadow-md transition-shadow">
-              <h3 className="text-base font-semibold text-gray-900 mb-4">Quick Actions</h3>
-              <div className="space-y-2">
-                <button
-                  onClick={() => navigate('/captain')}
-                  className="w-full p-3 bg-white hover:bg-gray-50 rounded-xl border border-gray-200 transition-all duration-200 hover:border-red-300 hover:shadow-sm flex items-center gap-3 group"
-                >
-                  <div className="p-2 bg-gradient-to-br from-red-100 to-red-200 group-hover:from-red-200 group-hover:to-red-300 rounded-lg transition-all duration-200">
-                    <Users className="text-red-700" size={18} />
+              <div className="mb-4">
+                <h3 className="text-base font-semibold text-gray-900">Service Overview</h3>
+                <p className="text-sm text-gray-500">What needs attention right now</p>
+              </div>
+              <div className="divide-y divide-gray-100 rounded-xl border border-gray-200 bg-white">
+                {[
+                  { label: 'Orders waiting', value: stats.pendingItems, tone: 'text-amber-700 bg-amber-50' },
+                  { label: 'Currently cooking', value: stats.preparingItems, tone: 'text-blue-700 bg-blue-50' },
+                  { label: 'Ready to serve', value: stats.readyItems, tone: 'text-emerald-700 bg-emerald-50' },
+                  { label: 'Tables available', value: stats.availableTables, tone: 'text-gray-700 bg-gray-100' }
+                ].map((item) => (
+                  <div key={item.label} className="flex items-center justify-between px-3 py-3">
+                    <span className="text-sm font-medium text-gray-700">{item.label}</span>
+                    <span className={`min-w-9 rounded-lg px-2 py-1 text-center text-sm font-bold ${item.tone}`}>
+                      {item.value}
+                    </span>
                   </div>
-                  <div className="text-left flex-1">
-                    <p className="font-medium text-gray-800 group-hover:text-red-700">Take Order</p>
-                    <p className="text-xs text-gray-500">Captain View</p>
-                  </div>
-                  <Eye className="text-gray-400 group-hover:text-red-500 transition-colors" size={16} />
-                </button>
-
-                <button
-                  onClick={() => navigate('/kitchen')}
-                  className="w-full p-3 bg-white hover:bg-gray-50 rounded-xl border border-gray-200 transition-all duration-200 hover:border-emerald-300 hover:shadow-sm flex items-center gap-3 group"
-                >
-                  <div className="p-2 bg-gradient-to-br from-emerald-100 to-emerald-200 group-hover:from-emerald-200 group-hover:to-emerald-300 rounded-lg transition-all duration-200">
-                    <ChefHat className="text-emerald-700" size={18} />
-                  </div>
-                  <div className="text-left flex-1">
-                    <p className="font-medium text-gray-800 group-hover:text-emerald-700">Kitchen Orders</p>
-                    <p className="text-xs text-gray-500">Manage preparation</p>
-                  </div>
-                  <Eye className="text-gray-400 group-hover:text-emerald-500 transition-colors" size={16} />
-                </button>
-
-                <button
-                  onClick={() => navigate('/billing')}
-                  className="w-full p-3 bg-white hover:bg-gray-50 rounded-xl border border-gray-200 transition-all duration-200 hover:border-blue-300 hover:shadow-sm flex items-center gap-3 group"
-                >
-                  <div className="p-2 bg-gradient-to-br from-blue-100 to-blue-200 group-hover:from-blue-200 group-hover:to-blue-300 rounded-lg transition-all duration-200">
-                    <Receipt className="text-blue-700" size={18} />
-                  </div>
-                  <div className="text-left flex-1">
-                    <p className="font-medium text-gray-800 group-hover:text-blue-700">Billing</p>
-                    <p className="text-xs text-gray-500">Generate bills</p>
-                  </div>
-                  <Eye className="text-gray-400 group-hover:text-blue-500 transition-colors" size={16} />
-                </button>
+                ))}
               </div>
             </div>
 
@@ -1173,3 +1149,4 @@ const Dashboard = () => {
 }
 
 export default Dashboard
+

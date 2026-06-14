@@ -307,7 +307,7 @@ const Billing = () => {
   const canvasToEscPosRaster = (canvas) => {
     const ctx = canvas.getContext('2d')
 
-    // 🔥 THERMAL PRINTER WIDTH (58mm ≈ 384px)
+    // Thermal printer width (58mm, approximately 384px)
     const printerWidth = 370
 
     // Create centered canvas
@@ -684,7 +684,7 @@ const Billing = () => {
       const totals = calculateTotals(finalBill)
       await printBillToPrinter(connection.characteristic, finalBill, totals)
 
-      alert('Bill printed successfully! 🎉')
+      alert('Bill printed successfully.')
     } catch (error) {
       console.error('Printing failed:', error)
 

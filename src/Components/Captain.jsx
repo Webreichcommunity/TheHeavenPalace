@@ -257,7 +257,7 @@ const Captain = () => {
   }
 
   // ADDED: Edit order items function
-  const editOrderItems = async (orderId, updatedItems) => {
+  const editOrderItems = async (orderId, updatedItems, updatedNotes = '') => {
     setLoading(true)
     setError(null)
 
@@ -273,6 +273,7 @@ const Captain = () => {
       await update(orderRef, {
         items: updatedItems,
         total: newTotal,
+        customerNotes: updatedNotes,
         updatedAt: new Date().toISOString(),
         updatedBy: 'Captain'
       })
@@ -460,7 +461,7 @@ const Captain = () => {
   }
 
   return (
-    <div className="min-h-screen mt-14 bg-gray-50">
+    <div className="min-h-screen bg-gray-50">
       {/* App Header */}
       <div className="sticky top-0 z-30 bg-white/95 backdrop-blur-sm border-b border-gray-100">
         <div className="max-w-7xl mx-auto px-4 py-3">
@@ -602,3 +603,4 @@ const Captain = () => {
 }
 
 export default Captain
+

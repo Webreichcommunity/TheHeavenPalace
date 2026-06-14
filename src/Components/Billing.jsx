@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react'
+﻿import React, { useState, useEffect, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { ref, onValue, off, update, remove, query, orderByChild } from 'firebase/database'
 import { database } from '../Firebase/config'
@@ -270,7 +270,7 @@ const Billing = () => {
    const canvasToEscPosRaster = (canvas) => {
     const ctx = canvas.getContext('2d')
 
-    // 🔥 THERMAL PRINTER WIDTH (58mm ≈ 384px)
+    // Thermal printer width (58mm, approximately 384px)
     const printerWidth = 370
 
     // Create centered canvas
@@ -544,7 +544,7 @@ const Billing = () => {
       const totals = calculateTotals(finalBill)
       await printBillToPrinter(connection.characteristic, finalBill, totals)
 
-      alert('Bill printed successfully! 🎉')
+      alert('Bill printed successfully.')
     } catch (error) {
       console.error('Printing failed:', error)
 
@@ -658,6 +658,34 @@ const Billing = () => {
     } catch (error) {
       console.error('Error marking bill as paid:', error)
       alert('Failed to update bill status')
+    }
+  }
+
+  const deleteBill = async (billId) => {
+    if (!billId) return
+    const ok = window.confirm('Delete this unpaid bill? This cannot be undone.')
+    if (!ok) return
+
+    try {
+      // remove bill from Firebase
+      await remove(ref(database, `bills/${billId}`))
+
+      // Also clear any table currentBill referencing this bill
+      // iterate tables to find references (best-effort)
+      const tablesRef = ref(database, 'tables')
+      onValue(tablesRef, (snapshot) => {
+        const tables = snapshot.val() || {}
+        Object.entries(tables).forEach(([tableId, table]) => {
+          if (table?.currentBill?.id === billId) {
+            update(ref(database, `tables/${tableId}`), { currentBill: null }).catch(() => {})
+          }
+        })
+      }, { onlyOnce: true })
+
+      alert('Bill deleted')
+    } catch (error) {
+      console.error('Failed to delete bill:', error)
+      alert('Failed to delete bill')
     }
   }
 
@@ -1093,6 +1121,12 @@ const Billing = () => {
                         className="flex-1 py-2.5 bg-red-600 text-white rounded-lg font-medium hover:bg-red-700 transition-colors"
                       >
                         Pay & Print
+                      </button>
+                      <button
+                        onClick={() => deleteBill(bill.id)}
+                        className="flex-1 py-2.5 bg-white border border-red-300 text-red-600 rounded-lg font-medium hover:bg-red-50 transition-colors"
+                      >
+                        Delete
                       </button>
                     </div>
                   </div>

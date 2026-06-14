@@ -7,6 +7,26 @@ import { printerService } from '../Components/printorder'
 const Kitchen = () => {
   const [orders, setOrders] = useState({})
   const previousOrderIdsRef = useRef(new Set())
+  const hasLoadedOrdersRef = useRef(false)
+  const bellAudioRef = useRef(null)
+
+  useEffect(() => {
+    // prefer user-provided ring.mp3 in public/, fallback to oscillator if unavailable
+    try {
+      bellAudioRef.current = new Audio('/ring.mp3')
+      bellAudioRef.current.preload = 'auto'
+      bellAudioRef.current.addEventListener('error', () => {
+        // if audio fails to load, release reference so fallback oscillator is used
+        bellAudioRef.current = null
+      })
+    } catch (e) {
+      bellAudioRef.current = null
+    }
+    return () => {
+      bellAudioRef.current?.pause()
+      bellAudioRef.current = null
+    }
+  }, [])
 
   useEffect(() => {
     const ordersRef = ref(database, 'orders')
@@ -18,7 +38,7 @@ const Kitchen = () => {
       const activeOrders = Object.entries(data).filter(([, order]) => order.status === 'active')
       const currentIds = new Set(activeOrders.map(([id]) => id))
 
-      if (previousOrderIdsRef.current.size > 0) {
+      if (hasLoadedOrdersRef.current) {
         const hasNewOrder = activeOrders.some(([id, order]) => {
           const isNewSource =
             order.isNew ||
@@ -32,12 +52,25 @@ const Kitchen = () => {
       }
 
       previousOrderIdsRef.current = currentIds
+      hasLoadedOrdersRef.current = true
     })
 
     return () => off(ordersRef)
   }, [])
 
   const playOrderBell = () => {
+    if (document.visibilityState !== 'visible') return
+
+    if (bellAudioRef.current) {
+      bellAudioRef.current.currentTime = 0
+      bellAudioRef.current.play().catch(() => playFallbackBell())
+      return
+    }
+
+    playFallbackBell()
+  }
+
+  const playFallbackBell = () => {
     try {
       const audioContext = new (window.AudioContext || window.webkitAudioContext)()
       const oscillator = audioContext.createOscillator()
@@ -197,7 +230,7 @@ const Kitchen = () => {
   }, [activeOrders])
 
   return (
-    <div className="min-h-screen mt-14 bg-gray-50">
+    <div className="min-h-screen bg-gray-50">
       <div className="sticky top-0 z-30 bg-white border-b border-gray-100">
         <div className="max-w-7xl mx-auto px-4 py-3">
           <div className="flex items-center justify-between">
@@ -298,7 +331,6 @@ const Kitchen = () => {
                       <div key={item.id} className="p-2 rounded-lg border border-gray-100">
                         <div className="flex items-center justify-between text-sm">
                           <div className="flex items-center gap-2 min-w-0">
-                            <span>{item.emoji}</span>
                             <span className="font-medium text-gray-900 truncate">{item.name}</span>
                             <span className="text-gray-500">x{item.quantity}</span>
                           </div>
@@ -338,3 +370,4 @@ const Kitchen = () => {
 }
 
 export default Kitchen
+

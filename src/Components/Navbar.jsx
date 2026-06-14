@@ -8,13 +8,9 @@ import {
   PlusCircle,
   Menu,
   X,
-  Bell,
-  Search,
   ChevronDown,
   User,
-  Settings,
   LogOut,
-  HelpCircle,
   BarChart4,
   Package
 } from 'lucide-react'
@@ -26,8 +22,6 @@ export default function Navbar({ setActiveTab }) {
   const navigate = useNavigate()
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false)
-  const [isSearchOpen, setIsSearchOpen] = useState(false)
-  const [hasNotifications, setHasNotifications] = useState(true)
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
   const [userRole, setUserRole] = useState('')
@@ -368,3 +362,4 @@ export default function Navbar({ setActiveTab }) {
     </>
   )
 }
+

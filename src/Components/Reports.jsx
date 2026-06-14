@@ -864,14 +864,14 @@ const Reports = () => {
             <h4 className="text-sm font-semibold text-gray-900 mb-4">Key Takeaways</h4>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="p-3 bg-emerald-50 border border-emerald-100 rounded-xl">
-                <p className="text-sm font-medium text-emerald-800 mb-1">💪 Strength</p>
+                <p className="text-sm font-medium text-emerald-800 mb-1">Strength</p>
                 <p className="text-xs text-emerald-700">
                   {Object.keys(stats.revenueByPaymentMode).length} payment methods available
                 </p>
               </div>
               
               <div className="p-3 bg-amber-50 border border-amber-100 rounded-xl">
-                <p className="text-sm font-medium text-amber-800 mb-1">📈 Opportunity</p>
+                <p className="text-sm font-medium text-amber-800 mb-1">Opportunity</p>
                 <p className="text-xs text-amber-700">
                   Focus on promoting {stats.popularItems.slice(0, 2).map(i => i.name).join(' & ')}
                 </p>

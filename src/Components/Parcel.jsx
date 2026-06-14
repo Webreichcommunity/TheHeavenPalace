@@ -282,7 +282,6 @@ const ParcelPage = () => {
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3 flex-1">
-                    <span className="text-xl">{item.emoji}</span>
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-1">
                         <h4 className="font-medium text-gray-800">{item.name}</h4>
@@ -307,7 +306,7 @@ const ParcelPage = () => {
                           <button
                             onClick={(e) => {
                               e.stopPropagation()
-                              updateQuantity(item.id, inCart.quantity - 1)
+                              updateQuantity(item.id, inCart.quantity === 1 ? 0.5 : inCart.quantity - 1)
                             }}
                             className="w-5 h-5 bg-white border border-emerald-300 rounded flex items-center justify-center hover:bg-emerald-50 transition-colors"
                           >
@@ -319,7 +318,7 @@ const ParcelPage = () => {
                           <button
                             onClick={(e) => {
                               e.stopPropagation()
-                              updateQuantity(item.id, inCart.quantity + 1)
+                              updateQuantity(item.id, inCart.quantity === 0.5 ? 1 : inCart.quantity + 1)
                             }}
                             className="w-5 h-5 bg-emerald-100 rounded flex items-center justify-center hover:bg-emerald-200 transition-colors"
                           >
@@ -390,7 +389,6 @@ const ParcelPage = () => {
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3 flex-1">
-                    <span className="text-xl">{item.emoji}</span>
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-1">
                         <h4 className="font-medium text-gray-800">{item.name}</h4>
@@ -404,7 +402,7 @@ const ParcelPage = () => {
                           {item.preparationTime} min
                         </span>
                         <span>₹{item.price}</span>
-                        {item.spicy && <span className="text-red-500">🌶️</span>}
+                        {item.spicy && <span className="font-medium text-red-600">Spicy</span>}
                         {item.popular && (
                           <span className="bg-yellow-100 text-yellow-700 text-xs px-2 py-0.5 rounded-full">
                             Popular
@@ -419,7 +417,7 @@ const ParcelPage = () => {
                       <div className="flex items-center gap-2">
                         <div className="flex items-center gap-1 bg-emerald-50 rounded-lg px-1 py-0.5">
                           <button
-                            onClick={() => updateQuantity(item.id, inCart.quantity - 1)}
+                            onClick={() => updateQuantity(item.id, inCart.quantity === 1 ? 0.5 : inCart.quantity - 1)}
                             className="w-6 h-6 bg-white border border-emerald-300 rounded flex items-center justify-center hover:bg-emerald-50 transition-colors"
                           >
                             <Minus size={10} className="text-emerald-600" />
@@ -428,7 +426,7 @@ const ParcelPage = () => {
                             {inCart.quantity}
                           </span>
                           <button
-                            onClick={() => updateQuantity(item.id, inCart.quantity + 1)}
+                            onClick={() => updateQuantity(item.id, inCart.quantity === 0.5 ? 1 : inCart.quantity + 1)}
                             className="w-6 h-6 bg-emerald-100 rounded flex items-center justify-center hover:bg-emerald-200 transition-colors"
                           >
                             <Plus size={10} className="text-emerald-700" />
@@ -806,7 +804,7 @@ const ParcelPage = () => {
   }
 
   const updateQuantity = (itemId, quantity) => {
-    if (quantity === 0) {
+    if (quantity <= 0) {
       removeFromOrder(itemId)
     } else {
       setSelectedItems(selectedItems.map(item =>
@@ -845,13 +843,12 @@ const ParcelPage = () => {
     return (
       <div
         key={item.id}
-        className="bg-white rounded-xl border border-gray-200 hover:border-emerald-300 transition-colors overflow-hidden group"
+        className="menu-row group"
       >
-        <div className="p-4">
-          <div className="flex justify-between items-start mb-3">
+        <div className="min-w-0">
+          <div className="flex justify-between items-start">
             <div className="flex-1">
-              <div className="flex items-center gap-2 mb-2">
-                <span className="text-2xl">{item.emoji}</span>
+              <div className="flex items-center gap-2 mb-1">
                 {item.popular && (
                   <span className="bg-emerald-50 text-emerald-700 text-xs px-2 py-1 rounded-full font-medium border border-emerald-100">
                     Popular
@@ -862,7 +859,7 @@ const ParcelPage = () => {
               <div className="flex items-center gap-2 text-sm text-gray-500">
                 <Clock size={14} className="text-emerald-600" />
                 <span>{item.preparationTime} min</span>
-                {item.spicy && <span className="text-red-500">🌶️</span>}
+                {item.spicy && <span className="font-medium text-red-600">Spicy</span>}
               </div>
             </div>
             <div className="text-right">
@@ -870,10 +867,12 @@ const ParcelPage = () => {
             </div>
           </div>
 
+        </div>
+        <div className="min-w-[7.5rem]">
           {inCart ? (
             <div className="flex items-center justify-between bg-emerald-50 rounded-xl p-1 border border-emerald-100">
               <button
-                onClick={() => updateQuantity(item.id, inCart.quantity - 1)}
+                onClick={() => updateQuantity(item.id, inCart.quantity === 1 ? 0.5 : inCart.quantity - 1)}
                 className="w-8 h-8 bg-white rounded-lg flex items-center justify-center hover:bg-gray-50 transition-colors border border-emerald-200"
               >
                 <Minus size={14} className="text-emerald-600" />
@@ -883,7 +882,7 @@ const ParcelPage = () => {
                 <span className="text-xs text-emerald-600 font-medium">in cart</span>
               </div>
               <button
-                onClick={() => updateQuantity(item.id, inCart.quantity + 1)}
+                onClick={() => updateQuantity(item.id, inCart.quantity === 0.5 ? 1 : inCart.quantity + 1)}
                 className="w-8 h-8 bg-emerald-600 rounded-lg flex items-center justify-center hover:bg-emerald-700 transition-colors"
               >
                 <Plus size={14} className="text-white" />
@@ -904,7 +903,7 @@ const ParcelPage = () => {
   }
 
   return (
-    <div className="min-h-screen mt-14 bg-gradient-to-br from-emerald-50/50 to-gray-100">
+    <div className="min-h-screen bg-gradient-to-br from-emerald-50/50 to-gray-100">
       {/* App Header */}
       <div className="sticky top-0 z-30 bg-white/95 backdrop-blur-sm border-b border-gray-100 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 py-3">
@@ -1126,7 +1125,7 @@ const ParcelPage = () => {
                             <div className="flex items-center gap-2">
                               {order.parcelStatus === 'preparing' && !isKitchenReady && (
                                 <span className="text-xs font-medium bg-amber-100 text-amber-700 px-2 py-1 rounded-full">
-                                  🕐 Preparing
+                                  Preparing
                                 </span>
                               )}
                               {isReady && (
@@ -1136,7 +1135,7 @@ const ParcelPage = () => {
                               )}
                               {order.parcelStatus === 'sent_to_bill' && (
                                 <span className="text-xs font-medium bg-blue-100 text-blue-700 px-2 py-1 rounded-full">
-                                  📋 Sent to Bill
+                                  Sent to Bill
                                 </span>
                               )}
                             </div>
@@ -1217,7 +1216,7 @@ const ParcelPage = () => {
                       Object.keys(filteredMenuItems).map(category => (
                         <div key={category}>
                           <h3 className="text-lg font-semibold text-gray-900 mb-3 px-2">{category}</h3>
-                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                            <div className="grid grid-cols-1 xl:grid-cols-2 gap-2">
                             {filteredMenuItems[category]?.map(item => renderMenuItemCard(item))}
                           </div>
                         </div>
@@ -1232,7 +1231,7 @@ const ParcelPage = () => {
                   </div>
                 ) : (
                   /* Show specific category */
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                  <div className="grid grid-cols-1 xl:grid-cols-2 gap-2">
                     {filteredMenuItems[activeCategory]?.length > 0 ? (
                       filteredMenuItems[activeCategory]?.map(item => renderMenuItemCard(item))
                     ) : (
@@ -1251,8 +1250,8 @@ const ParcelPage = () => {
           {/* Bottom Action Bar */}
           <div className="sticky bottom-0 border-t rounded-2xl border-gray-100 bg-white/95 backdrop-blur-sm shadow-lg">
             <div className="p-4">
-              <div className="flex items-center justify-between gap-4">
-                <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex min-w-0 flex-wrap items-center gap-3">
                   {selectedItems.length > 0 ? (
                     <>
                       <div className="w-10 h-10 bg-emerald-100 rounded-xl flex items-center justify-center border border-emerald-200">
@@ -1321,7 +1320,6 @@ const ParcelPage = () => {
                 {selectedItems.map(item => (
                   <div key={item.id} className="flex items-center justify-between p-3 bg-white border border-gray-100 rounded-xl">
                     <div className="flex items-center gap-3">
-                      <span className="text-xl">{item.emoji}</span>
                       <div>
                         <p className="font-medium text-gray-800">{item.name}</p>
                         <p className="text-sm text-gray-500">₹{item.price} × {item.quantity}</p>
@@ -1420,3 +1418,4 @@ const ParcelPage = () => {
 }
 
 export default ParcelPage
+

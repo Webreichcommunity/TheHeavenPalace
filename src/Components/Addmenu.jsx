@@ -38,50 +38,38 @@ const AddMenu = () => {
     price: '',
     preparationTime: '',
     category: '', // Default to first category
-    emoji: '🍔',
+    emoji: '',
     popular: false
   })
 
   // Categories with default emojis
   const categories = [
-    { id: 'hotandbuns', name: 'Hot And Buns', emoji: '🍔' },
-    { id: 'shakesandmocktail', name: 'Shakes And Mocktail', emoji: '🥤' },
-    { id: 'pasta', name: 'Pasta', emoji: '🍝' },
-    { id: 'friesandburger', name: 'Fries And Burger', emoji: '🍟' },
-    { id: 'papad', name: 'Papad', emoji: '🥠' },
-    { id: 'pizzaandsandwich', name: 'Pizza And Sandwich', emoji: '🍕' },
-    { id: 'sizzler', name: 'Sizzler', emoji: '🥘' },
-    { id: 'soupandstarters', name: 'Soup And Starter', emoji: '🍲' },
-    { id: 'chinesenoodlesandrice', name: 'Chinese Noodles And Rice', emoji: '🍜' },
-    { id: 'tandooristarters', name: 'Tandoori Starter', emoji: '🍢' },
-    { id: 'paneerkakamal', name: 'Paneer Ka Kamal', emoji: '🧀' },
-    { id: 'vegkhajana', name: 'Veg Khajana', emoji: '🥗' },
-    { id: 'varhadi', name: 'Varhadi', emoji: '🌶️' },
-    { id: 'dalandrice', name: 'Dal And Rice', emoji: '🍚' },
-    { id: 'rolls', name: 'Roll', emoji: '🌯' },
-    { id: 'tandoori', name: 'Tandoori', emoji: '🍗' },
-    { id: 'brownie', name: 'Brownie', emoji: '🍫' },
+    { id: 'hotandbuns', name: 'Hot And Buns' },
+    { id: 'shakesandmocktail', name: 'Shakes And Mocktail' },
+    { id: 'pasta', name: 'Pasta' },
+    { id: 'friesandburger', name: 'Fries And Burger' },
+    { id: 'papad', name: 'Papad' },
+    { id: 'pizzaandsandwich', name: 'Pizza And Sandwich' },
+    { id: 'sizzler', name: 'Sizzler' },
+    { id: 'soupandstarters', name: 'Soup And Starter' },
+    { id: 'chinesenoodlesandrice', name: 'Chinese Noodles And Rice' },
+    { id: 'tandooristarters', name: 'Tandoori Starter' },
+    { id: 'paneerkakamal', name: 'Paneer Ka Kamal' },
+    { id: 'vegkhajana', name: 'Veg Khajana' },
+    { id: 'varhadi', name: 'Varhadi' },
+    { id: 'dalandrice', name: 'Dal And Rice' },
+    { id: 'rolls', name: 'Roll' },
+    { id: 'tandoori', name: 'Tandoori' },
+    { id: 'brownie', name: 'Brownie' },
   ]
 
   // Emojis for each category
   const categoryEmojis = {
-    hotandbuns: ['🍔', '🌭', '🥐', '🥪', '🥞', '🧇'],
-    shakes: ['🥤', '🍹', '🍸', '🧃', '🥛', '🍵'],
-    pasta: ['🍝', '🍜', '🥘', '🍲'],
-    fries: ['🍟', '🍔', '🧅', '🥔'],
-    papad: ['🥠', '🍘', '🥨'],
-    pizza: ['🍕', '🥪', '🌮', '🌯'],
-    sizzler: ['🥘', '🍳', '🔥', '🍖'],
-    soup: ['🍲', '🥣', '🥘', '🍜'],
-    chinese: ['🍜', '🍚', '🥢', '🥡'],
-    starter: ['🍢', '🍤', '🥓', '🥠'],
-    paneerkakamal: ['🧀', '🥘', '🍛', '🥄'],
-    veg: ['🥗', '🥦', '🥒', '🍆'],
-    varhadi: ['🌶️', '🥘', '🍛', '🔥'],
-    dal: ['🍚', '🥘', '🥣', '🍲'],
-    roll: ['🌯', '🌮', '🥙', '🥓'],
-    tandoori: ['🍗', '🍖', '🔥', '🍢'],
-    brownie: ['🍫', '🍰', '🧁', '🍮']
+    hotandbuns: [''], shakesandmocktail: [''], pasta: [''], friesandburger: [''],
+    papad: [''], pizzaandsandwich: [''], sizzler: [''], soupandstarters: [''],
+    chinesenoodlesandrice: [''], tandooristarters: [''], paneerkakamal: [''],
+    vegkhajana: [''], varhadi: [''], dalandrice: [''], rolls: [''], tandoori: [''],
+    brownie: ['']
   }
 
   // Fetch menu items
@@ -122,7 +110,7 @@ const AddMenu = () => {
       price: '',
       preparationTime: '',
       category: 'hotandbuns',
-      emoji: '🍔',
+      emoji: '',
       popular: false
     })
     setEditingItem(null)
@@ -137,7 +125,7 @@ const AddMenu = () => {
 
   // Get random emoji for category
   const getRandomEmojiForCategory = (category) => {
-    const emojis = categoryEmojis[category] || ['🍽️'];
+    const emojis = categoryEmojis[category] || [''];
     return emojis[Math.floor(Math.random() * emojis.length)];
   }
 
@@ -349,7 +337,7 @@ Available categories: ${categories.map(cat => cat.id).join(', ')}`
     })
 
   return (
-    <div className="min-h-screen mt-14 bg-gradient-to-br from-gray-50 to-gray-100/50 p-3 md:p-4">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100/50 p-3 md:p-4">
       <div className="max-w-7xl mx-auto">
         
         {/* Message Display */}
@@ -431,7 +419,7 @@ Available categories: ${categories.map(cat => cat.id).join(', ')}`
               <option value="all">All Categories</option>
               {categories.map(category => (
                 <option key={category.id} value={category.id}>
-                  {category.emoji} {category.name}
+                  {category.name}
                 </option>
               ))}
             </select>
@@ -447,7 +435,7 @@ Available categories: ${categories.map(cat => cat.id).join(', ')}`
                 : 'bg-gray-100 text-gray-600 hover:text-gray-900'
               }`}
           >
-            📋 All Items
+            All Items
           </button>
           {categories.map(category => (
             <button
@@ -458,7 +446,7 @@ Available categories: ${categories.map(cat => cat.id).join(', ')}`
                   : 'bg-gray-100 text-gray-600 hover:text-gray-900'
                 }`}
             >
-              {category.emoji} {category.name}
+              {category.name}
             </button>
           ))}
         </div>
@@ -498,12 +486,11 @@ Available categories: ${categories.map(cat => cat.id).join(', ')}`
                   {/* Item Header */}
                   <div className="p-3 border-b border-gray-100">
                     <div className="flex items-center gap-2 mb-1">
-                      <span className="text-xl">{item.emoji}</span>
                       <div className="flex-1 min-w-0">
                         <h3 className="font-semibold text-gray-800 text-sm truncate">{item.name}</h3>
                         <div className="flex items-center justify-between">
                           <span className="text-xs text-gray-500 px-1.5 py-0.5 bg-gray-100 rounded">
-                            {categoryInfo.emoji} {categoryInfo.name}
+                            {categoryInfo.name}
                           </span>
                           {item.popular && (
                             <span className="px-1.5 py-0.5 bg-yellow-100 text-yellow-700 rounded text-xs font-medium flex items-center gap-0.5">
@@ -598,8 +585,8 @@ Available categories: ${categories.map(cat => cat.id).join(', ')}`
 
       {/* Add/Edit Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 bg-black/30 backdrop-blur-sm z-50 flex items-center justify-center p-3">
-          <div className="bg-white/90 backdrop-blur-sm rounded-lg w-full max-w-md shadow-xl border border-gray-200/50">
+        <div className="app-modal-backdrop">
+          <div className="app-modal">
             {/* Modal Header */}
             <div className="p-3 border-b border-gray-100 flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -684,51 +671,10 @@ Available categories: ${categories.map(cat => cat.id).join(', ')}`
                 >
                   {categories.map(category => (
                     <option key={category.id} value={category.id}>
-                      {category.emoji} {category.name}
+                      {category.name}
                     </option>
                   ))}
                 </select>
-              </div>
-
-              {/* Emoji Selection */}
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">
-                  Emoji
-                </label>
-                <div className="grid grid-cols-8 gap-1 max-h-32 overflow-y-auto p-2 bg-gray-50 rounded-lg border border-gray-200">
-                  {categoryEmojis[formData.category]?.map((emoji, index) => (
-                    <button
-                      key={index}
-                      type="button"
-                      onClick={() => setFormData(prev => ({ ...prev, emoji }))}
-                      className={`w-8 h-8 text-lg rounded hover:bg-gray-200 transition-colors flex items-center justify-center ${formData.emoji === emoji ? 'bg-red-100 border-2 border-red-500' : ''
-                        }`}
-                    >
-                      {emoji}
-                    </button>
-                  ))}
-                </div>
-                <div className="flex items-center gap-2 mt-1">
-                  <input
-                    type="text"
-                    name="emoji"
-                    value={formData.emoji}
-                    onChange={handleInputChange}
-                    placeholder="Or type emoji"
-                    className="flex-1 p-2 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:border-red-500"
-                    maxLength="2"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setFormData(prev => ({
-                      ...prev,
-                      emoji: getRandomEmojiForCategory(prev.category)
-                    }))}
-                    className="px-2 py-2 bg-gray-100 text-gray-700 rounded text-sm hover:bg-gray-200 transition-colors"
-                  >
-                    Random
-                  </button>
-                </div>
               </div>
 
               {/* Popular Toggle */}
@@ -782,8 +728,8 @@ Available categories: ${categories.map(cat => cat.id).join(', ')}`
 
       {/* Bulk Upload Modal */}
       {showBulkModal && (
-        <div className="fixed inset-0 bg-black/30 backdrop-blur-sm z-50 flex items-center justify-center p-3">
-          <div className="bg-white/90 backdrop-blur-sm rounded-lg w-full max-w-2xl shadow-xl border border-gray-200/50">
+        <div className="app-modal-backdrop">
+          <div className="app-modal app-modal-lg">
             {/* Modal Header */}
             <div className="p-3 border-b border-gray-100 flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -862,7 +808,6 @@ Mango Shake, 80, shakes
                           <th className="text-left p-2 text-xs font-medium text-gray-500">Item</th>
                           <th className="text-left p-2 text-xs font-medium text-gray-500">Price</th>
                           <th className="text-left p-2 text-xs font-medium text-gray-500">Category</th>
-                          <th className="text-left p-2 text-xs font-medium text-gray-500">Emoji</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100">
@@ -875,7 +820,6 @@ Mango Shake, 80, shakes
                                 {item.category}
                               </span>
                             </td>
-                            <td className="p-2 text-lg">{item.emoji}</td>
                           </tr>
                         ))}
                       </tbody>
