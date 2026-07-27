@@ -1,8 +1,9 @@
-import React, { useCallback } from 'react'
+import React, { useCallback, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import {
   Link as LinkIcon,
   Unlink,
+  ArrowLeftRight,
   Table,
   Building,
   Package,
@@ -37,6 +38,11 @@ const TableManager = ({
   getTableActiveOrdersCount,
   joinTables,
   unjoinTables,
+  showShiftTableModal,
+  setShowShiftTableModal,
+  shiftFromTableId,
+  setShiftFromTableId,
+  shiftTableOrders,
   isInitializing
 }) => {
   // Floor configuration
@@ -90,6 +96,22 @@ const TableManager = ({
     return parts[2]
   }, [])
 
+  const allTableOptions = useMemo(() => (
+    floorConfig.flatMap(floor =>
+      floor.tables.map(table => ({
+        id: getTableId(table.number, floor.id),
+        number: table.number,
+        floor: floor.id,
+        floorLabel: floor.label,
+        displayName: table.displayName
+      }))
+    )
+  ), [getTableId])
+
+  const getTableOptionById = useCallback((tableId) => {
+    return allTableOptions.find(table => table.id === tableId)
+  }, [allTableOptions])
+
   // Get accurate table status
   const getTableStatus = useCallback((tableNumber, floorId) => {
     const tableId = getTableId(tableNumber, floorId)
@@ -108,19 +130,19 @@ const TableManager = ({
     return 'occupied'
   }, [tables, getTableId, getTableActiveOrdersCount])
 
-  const getFloorStats = useCallback((floorTables) => {
+  const getFloorStats = useCallback((floor) => {
+    const floorTables = floor.tables
     if (!floorTables || floorTables.length === 0) {
       return { totalTables: 0, occupiedTables: 0, activeOrdersCount: 0, totalRevenue: 0 }
     }
 
     const floorTableIds = floorTables.map(table =>
-      getTableId(table.number, floorTables[0]?.floorId || '1')
+      getTableId(table.number, floor.id)
     )
 
     const occupiedTables = floorTableIds.filter(tableId => {
       const tableNumber = getDisplayTableNumber(tableId)
-      const floorId = tableId.includes('table-3-') ? '3' : tableId.includes('table-1-') ? '1' : '2'
-      const status = getTableStatus(tableNumber, floorId)
+      const status = getTableStatus(tableNumber, floor.id)
       return status === 'occupied'
     }).length
 
@@ -141,7 +163,7 @@ const TableManager = ({
       activeOrdersCount,
       totalRevenue
     }
-  }, [tables, activeOrders, getTableId, getDisplayTableNumber, getTableStatus, getTableActiveOrdersCount])
+  }, [activeOrders, getTableId, getDisplayTableNumber, getTableStatus, getTableActiveOrdersCount])
 
   const toggleFloor = (floorId) => {
     setExpandedFloors(prev =>
@@ -185,6 +207,20 @@ const TableManager = ({
     }
   }
 
+  const handleShiftTable = async (destinationTable) => {
+    if (!shiftFromTableId) {
+      setError('Select source table')
+      setTimeout(() => setError(null), 3000)
+      return
+    }
+
+    try {
+      await shiftTableOrders(shiftFromTableId, destinationTable)
+    } catch (error) {
+      console.error('Error shifting table:', error)
+    }
+  }
+
   const handleUnjoinTables = async (tableId) => {
     try {
       await unjoinTables(tableId)
@@ -203,6 +239,139 @@ const TableManager = ({
       displayName: floorConfig.find(f => f.id === floorId)?.tables.find(t => t.number === tableNumber)?.displayName || `T${tableNumber}`
     }
     onTableSelect(table)
+  }
+
+  const renderShiftTableModal = () => {
+    const sourceTable = getTableOptionById(shiftFromTableId)
+    const sourceOrdersCount = getTableActiveOrdersCount(shiftFromTableId)
+    const sourceAmount = Object.values(activeOrders || {})
+      .filter(order => order.tableId === shiftFromTableId && order.status === 'active')
+      .reduce((sum, order) => sum + (order.total || 0), 0)
+    const sourceOptions = allTableOptions.filter(table =>
+      getTableActiveOrdersCount(table.id) > 0 && !tables[table.id]?.isJoined
+    )
+
+    return (
+      <div className="app-modal-backdrop">
+        <div className="app-modal app-modal-lg">
+          <div className="p-5 border-b border-gray-100 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center">
+                <ArrowLeftRight size={20} className="text-indigo-600" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-gray-900">Shift Table KOT</h3>
+                <p className="text-sm text-gray-500">Move active orders with full billing details</p>
+              </div>
+            </div>
+            <button
+              onClick={() => {
+                setShowShiftTableModal(false)
+                setShiftFromTableId('')
+              }}
+              className="w-8 h-8 hover:bg-gray-100 rounded-xl flex items-center justify-center transition-colors"
+            >
+              <X size={18} />
+            </button>
+          </div>
+
+          <div className="p-5 space-y-5">
+            {sourceOptions.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-6 text-center">
+                <Table size={28} className="mx-auto text-gray-400 mb-2" />
+                <p className="font-medium text-gray-800">No active table available to shift</p>
+                <p className="text-sm text-gray-500 mt-1">Only tables with active KOT can be selected.</p>
+              </div>
+            ) : (
+              <>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    From table
+                  </label>
+                  <select
+                    value={shiftFromTableId}
+                    onChange={(event) => setShiftFromTableId(event.target.value)}
+                    className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/20 bg-white"
+                  >
+                    <option value="">Select occupied table</option>
+                    {sourceOptions.map(table => (
+                      <option key={table.id} value={table.id}>
+                        {table.displayName} - {table.floorLabel} - {getTableActiveOrdersCount(table.id)} KOT
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {sourceTable && (
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="rounded-xl bg-gray-50 border border-gray-100 p-4">
+                      <p className="text-xs uppercase text-gray-500 font-semibold">Active KOT</p>
+                      <p className="text-2xl font-bold text-gray-900 mt-1">{sourceOrdersCount}</p>
+                    </div>
+                    <div className="rounded-xl bg-emerald-50 border border-emerald-100 p-4">
+                      <p className="text-xs uppercase text-emerald-700 font-semibold">Bill Amount</p>
+                      <p className="text-2xl font-bold text-emerald-700 mt-1">₹{sourceAmount}</p>
+                    </div>
+                  </div>
+                )}
+
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-sm font-medium text-gray-700">To table</p>
+                    <p className="text-xs text-gray-500">Available tables only</p>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-[34vh] overflow-y-auto pr-1">
+                    {allTableOptions.map(table => {
+                      const ordersCount = getTableActiveOrdersCount(table.id)
+                      const isSource = table.id === shiftFromTableId
+                      const isJoined = tables[table.id]?.isJoined
+                      const isDisabled = !shiftFromTableId || isSource || ordersCount > 0 || isJoined || loading
+
+                      return (
+                        <button
+                          key={table.id}
+                          onClick={() => handleShiftTable(table)}
+                          disabled={isDisabled}
+                          className={`p-3 rounded-xl border text-left transition-colors ${
+                            isDisabled
+                              ? 'bg-gray-50 border-gray-200 text-gray-400 cursor-not-allowed'
+                              : 'bg-white border-gray-200 hover:border-indigo-400 hover:bg-indigo-50'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="font-semibold">{table.displayName}</span>
+                            <Table size={16} />
+                          </div>
+                          <p className="text-xs mt-1">{table.floorLabel}</p>
+                          <p className="text-xs mt-1">
+                            {isSource ? 'Source table' : isJoined ? 'Joined' : ordersCount > 0 ? 'Occupied' : 'Available'}
+                          </p>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+
+          <div className="p-5 border-t border-gray-100 flex items-center justify-between gap-3">
+            <p className="text-xs text-gray-500">
+              Kitchen KOT, table status, and billing totals move together.
+            </p>
+            <button
+              onClick={() => {
+                setShowShiftTableModal(false)
+                setShiftFromTableId('')
+              }}
+              className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-xl transition-colors"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   const renderTableJoinModal = () => (
@@ -339,6 +508,13 @@ const TableManager = ({
               <LinkIcon size={16} />
               <span>Join</span>
             </button>
+            <button
+              onClick={() => setShowShiftTableModal(true)}
+              className="px-4 py-2 bg-indigo-600 text-white rounded-xl font-medium hover:bg-indigo-700 transition-colors flex items-center gap-2"
+            >
+              <ArrowLeftRight size={16} />
+              <span>Shift</span>
+            </button>
           </div>
         </div>
 
@@ -371,7 +547,7 @@ const TableManager = ({
       {viewMode === 'grid' ? (
         <div className="space-y-4">
           {floorConfig.map(floor => {
-            const stats = getFloorStats(floor.tables)
+            const stats = getFloorStats(floor)
             const isExpanded = expandedFloors.includes(floor.id)
 
             if (floor.tables.length === 0) return null
@@ -542,6 +718,7 @@ const TableManager = ({
     <>
       {renderTableSelection()}
       {showTableJoinModal && renderTableJoinModal()}
+      {showShiftTableModal && renderShiftTableModal()}
     </>
   )
 }

@@ -338,7 +338,7 @@ const Billing = () => {
       .replace(/'/g, '&#039;')
   }
 
-   const generateBillHTML = (bill, totals) => {
+   const generateBillHTML = (bill, totals, options = {}) => {
     const restaurantName = "THE HEAVEN PALACE"
     const address = "Near Rajeshwar Dudh Dairy, Dabki Road, Akola"
     const phone = "+91 9518344550"
@@ -363,6 +363,7 @@ const Billing = () => {
       <div style="font-size:16px; font-weight:bold;">
         ${restaurantName}
       </div>
+      ${options.isReprint ? '<div style="font-size:12px;font-weight:bold;margin-top:2px;">REPRINT COPY</div>' : ''}
       <div style="font-size:11px; margin-top:3px;">
         ${address}
       </div>
@@ -451,7 +452,7 @@ const Billing = () => {
   }
 
 
-  const printBillToPrinter = async (characteristic, bill, totals) => {
+  const printBillToPrinter = async (characteristic, bill, totals, options = {}) => {
     try {
       // Create printable HTML element
       const tempDiv = document.createElement('div')
@@ -465,7 +466,7 @@ const Billing = () => {
       tempDiv.style.position = 'absolute'
       tempDiv.style.left = '-9999px'
 
-      tempDiv.innerHTML = generateBillHTML(bill, totals)
+      tempDiv.innerHTML = generateBillHTML(bill, totals, options)
       document.body.appendChild(tempDiv)
 
       // Import html2canvas dynamically
@@ -517,8 +518,8 @@ const Billing = () => {
   }
 
   // Main print function
-  const printBill = async () => {
-    if (!finalBill) {
+  const printBill = async (billToPrint = finalBill, options = {}) => {
+    if (!billToPrint) {
       alert('No bill to print')
       return
     }
@@ -541,21 +542,21 @@ const Billing = () => {
         return
       }
 
-      const totals = calculateTotals(finalBill)
-      await printBillToPrinter(connection.characteristic, finalBill, totals)
+      const totals = calculateTotals(billToPrint, options.discount ?? discount)
+      await printBillToPrinter(connection.characteristic, billToPrint, totals, options)
 
-      alert('Bill printed successfully.')
+      alert(options.isReprint ? 'Bill reprinted successfully.' : 'Bill printed successfully.')
     } catch (error) {
       console.error('Printing failed:', error)
 
       // Fallback to browser print
-      const totals = calculateTotals(finalBill)
+      const totals = calculateTotals(billToPrint, options.discount ?? discount)
       const printWindow = window.open('', '_blank')
 
       printWindow.document.write(`
         <html>
           <head>
-            <title>Bill #${finalBill.billNumber}</title>
+            <title>${options.isReprint ? 'Reprint ' : ''}Bill #${billToPrint.billNumber}</title>
             <style>
               @media print {
                 body { 
@@ -577,15 +578,16 @@ const Billing = () => {
           <body>
             <div class="header">
               <h2>THE HEAVEN PLACE</h2>
-              <p>Bill #: ${finalBill.billNumber}</p>
-              <p>Table: ${finalBill.tableNumber}</p>
-              <p>${new Date(finalBill.completedAt).toLocaleDateString()} ${new Date(finalBill.completedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
-              ${finalBill.paymentMode ? `<p>Payment: ${finalBill.paymentMode}</p>` : ''}
+              ${options.isReprint ? '<p><strong>REPRINT COPY</strong></p>' : ''}
+              <p>Bill #: ${billToPrint.billNumber}</p>
+              <p>Table: ${billToPrint.tableNumber}</p>
+              <p>${new Date(billToPrint.completedAt).toLocaleDateString()} ${new Date(billToPrint.completedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+              ${billToPrint.paymentMode ? `<p>Payment: ${billToPrint.paymentMode}</p>` : ''}
               <hr>
             </div>
             
             <div class="items">
-              ${finalBill.orders.map(order =>
+              ${billToPrint.orders.map(order =>
         order.items.map(item => `
                   <div class="item">
                     <div class="item-name">${item.name}</div>
@@ -603,11 +605,11 @@ const Billing = () => {
               <div class="total">TOTAL: ₹${totals.total.toFixed(2)}</div>
             </div>
             
-            ${finalBill.paymentMode ? `
+            ${billToPrint.paymentMode ? `
             <div class="payment-info">
-              <div><strong>Payment Mode:</strong> ${finalBill.paymentMode}</div>
+              <div><strong>Payment Mode:</strong> ${billToPrint.paymentMode}</div>
               <div><strong>Status:</strong> PAID</div>
-              <div><strong>Paid At:</strong> ${new Date(finalBill.paidAt || finalBill.completedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+              <div><strong>Paid At:</strong> ${new Date(billToPrint.paidAt || billToPrint.completedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
             </div>
             ` : ''}
             
@@ -632,14 +634,14 @@ const Billing = () => {
   }
 
   // Helper functions
-  const calculateTotals = (bill) => {
+  const calculateTotals = (bill, appliedDiscount = discount) => {
     if (!bill) return { subtotal: 0, tax: 0, total: 0 }
 
     const subtotal = bill.finalTotal
     const tax = (subtotal * taxRate) / 100
-    const total = subtotal + 0 - discount
+    const total = subtotal + 0 - appliedDiscount
 
-    return { subtotal, tax, total }
+    return { subtotal, tax, total, discount: appliedDiscount, taxRate }
   }
 
   const markAsPaid = async (billId) => {
@@ -761,6 +763,13 @@ const Billing = () => {
     setFinalBill(bill)
     setActiveTab('current')
     setDiscount(0)
+  }
+
+  const handleReprintBill = async (bill) => {
+    if (!bill) return
+    setDiscount(0)
+    setFinalBill(bill)
+    await printBill(bill, { isReprint: true, discount: 0 })
   }
 
   const filteredBills = (bills) => {
@@ -1189,12 +1198,22 @@ const Billing = () => {
                               </div>
                             </div>
                           </div>
-                          <button
-                            onClick={() => loadBillFromHistory(bill)}
-                            className="w-full mt-4 py-2.5 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 transition-colors"
-                          >
-                            View Bill Details
-                          </button>
+                          <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <button
+                              onClick={() => loadBillFromHistory(bill)}
+                              className="py-2.5 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 transition-colors"
+                            >
+                              View Bill Details
+                            </button>
+                            <button
+                              onClick={() => handleReprintBill(bill)}
+                              disabled={isPrinting}
+                              className="py-2.5 bg-red-600 text-white rounded-lg font-medium hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                            >
+                              <Printer size={16} />
+                              <span>{isPrinting ? 'Printing...' : 'Reprint'}</span>
+                            </button>
+                          </div>
                         </div>
                       ))}
                     </div>

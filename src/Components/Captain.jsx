@@ -14,7 +14,8 @@ import {
   Bell,
   Printer,
   ShoppingCart,
-  Link as LinkIcon
+  Link as LinkIcon,
+  ArrowLeftRight
 } from 'lucide-react'
 import TableManager from './TableManager'
 import OrderManager from './OrderManager'
@@ -48,6 +49,8 @@ const Captain = () => {
   const [showEditOrderModal, setShowEditOrderModal] = useState(false)
   const [orderToEdit, setOrderToEdit] = useState(null)
   const [menuItems, setMenuItems] = useState({})
+  const [showShiftTableModal, setShowShiftTableModal] = useState(false)
+  const [shiftFromTableId, setShiftFromTableId] = useState('')
 
   // Fetch menu items
   useEffect(() => {
@@ -460,6 +463,97 @@ const Captain = () => {
     setCustomerNotes('')
   }
 
+  const shiftTableOrders = async (sourceTableId, destinationTable) => {
+    setLoading(true)
+    setError(null)
+
+    try {
+      if (!sourceTableId || !destinationTable?.id) {
+        throw new Error('Select source and destination tables')
+      }
+
+      if (sourceTableId === destinationTable.id) {
+        throw new Error('Source and destination cannot be same')
+      }
+
+      if (tables[sourceTableId]?.isJoined || tables[destinationTable.id]?.isJoined) {
+        throw new Error('Unjoin tables before shifting KOT')
+      }
+
+      const sourceOrders = Object.entries(activeOrders || {})
+        .filter(([, order]) => order.tableId === sourceTableId && order.status === 'active')
+
+      if (sourceOrders.length === 0) {
+        throw new Error('No active KOT found on source table')
+      }
+
+      const destinationActiveOrders = Object.values(activeOrders || {})
+        .filter(order => order.tableId === destinationTable.id && order.status === 'active')
+
+      if (destinationActiveOrders.length > 0) {
+        throw new Error('Destination table already has active KOT')
+      }
+
+      const sourceTable = tables[sourceTableId] || {}
+      const sourceDisplayName = sourceOrders[0]?.[1]?.tableNumber || sourceTable.displayName || sourceTable.number || sourceTableId
+      const shiftedAt = new Date().toISOString()
+      const updates = {}
+
+      sourceOrders.forEach(([orderId, order]) => {
+        updates[`orders/${orderId}/tableId`] = destinationTable.id
+        updates[`orders/${orderId}/tableNumber`] = destinationTable.displayName
+        updates[`orders/${orderId}/floor`] = destinationTable.floor
+        updates[`orders/${orderId}/joinedGroup`] = null
+        updates[`orders/${orderId}/shiftedAt`] = shiftedAt
+        updates[`orders/${orderId}/shiftedBy`] = 'Captain'
+        updates[`orders/${orderId}/shiftedFrom`] = {
+          tableId: sourceTableId,
+          tableNumber: order.tableNumber || sourceDisplayName,
+          floor: order.floor || sourceTable.floor || null
+        }
+      })
+
+      updates[`tables/${destinationTable.id}`] = {
+        ...tables[destinationTable.id],
+        status: 'occupied',
+        floor: destinationTable.floor,
+        number: destinationTable.number,
+        displayName: destinationTable.displayName,
+        lastOrderAt: sourceTable.lastOrderAt || shiftedAt,
+        isJoined: false,
+        joinedGroup: null,
+        shiftedFrom: sourceDisplayName,
+        shiftedAt
+      }
+
+      updates[`tables/${sourceTableId}`] = null
+
+      await update(ref(database), updates)
+
+      await push(ref(database, 'notifications'), {
+        type: 'table_shifted',
+        message: `KOT shifted from ${sourceDisplayName} to ${destinationTable.displayName}`,
+        tableNumber: destinationTable.displayName,
+        tableId: destinationTable.id,
+        previousTableNumber: sourceDisplayName,
+        ordersCount: sourceOrders.length,
+        createdAt: shiftedAt,
+        read: false
+      })
+
+      setShowShiftTableModal(false)
+      setShiftFromTableId('')
+      setSelectedTable(destinationTable)
+      setCurrentStep('addItems')
+    } catch (error) {
+      console.error('Error shifting table:', error)
+      setError(error.message || 'Failed to shift table')
+      throw error
+    } finally {
+      setLoading(false)
+    }
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* App Header */}
@@ -539,6 +633,11 @@ const Captain = () => {
             getTableActiveOrdersCount={getTableActiveOrdersCount}
             joinTables={joinTables}
             unjoinTables={unjoinTables}
+            showShiftTableModal={showShiftTableModal}
+            setShowShiftTableModal={setShowShiftTableModal}
+            shiftFromTableId={shiftFromTableId}
+            setShiftFromTableId={setShiftFromTableId}
+            shiftTableOrders={shiftTableOrders}
             isInitializing={isInitializing}
           />
         ) : (
