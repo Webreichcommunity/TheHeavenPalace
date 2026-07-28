@@ -451,65 +451,202 @@ const Billing = () => {
     return html
   }
 
+  const encodeText = (text) => new TextEncoder().encode(text)
+
+  const loadReceiptLogo = async () => {
+    try {
+      const image = new Image()
+      image.crossOrigin = 'anonymous'
+
+      await new Promise((resolve, reject) => {
+        image.onload = resolve
+        image.onerror = reject
+        image.src = '/logo.svg'
+      })
+
+      const logoWidth = 112
+      const logoHeight = 58
+      const canvas = document.createElement('canvas')
+      canvas.width = logoWidth
+      canvas.height = logoHeight
+
+      const ctx = canvas.getContext('2d')
+      ctx.fillStyle = '#fff'
+      ctx.fillRect(0, 0, logoWidth, logoHeight)
+
+      const scale = Math.min(logoWidth / image.naturalWidth, logoHeight / image.naturalHeight)
+      const drawWidth = Math.floor(image.naturalWidth * scale)
+      const drawHeight = Math.floor(image.naturalHeight * scale)
+      const offsetX = Math.floor((logoWidth - drawWidth) / 2)
+      const offsetY = Math.floor((logoHeight - drawHeight) / 2)
+      ctx.drawImage(image, offsetX, offsetY, drawWidth, drawHeight)
+
+      return canvasToEscPosRaster(canvas)
+    } catch (error) {
+      console.warn('Receipt logo could not be loaded:', error)
+      return new Uint8Array()
+    }
+  }
+
+  const buildEscPosBillPayload = async (bill, totals, options = {}) => {
+    const receiptWidth = 35
+    const tableWidth = 33
+    const restaurantName = 'THE HEAVEN PALACE'
+    const address = 'Near Rajeshwar Dudh Dairy, Dabki Road, Akola'
+    const phone = '+91 8055608910'
+    const bytes = []
+
+    const pushBytes = (...values) => bytes.push(...values)
+    const pushText = (text = '') => bytes.push(...encodeText(text))
+    const alignCenter = () => pushBytes(0x1B, 0x61, 0x01)
+    const boldOn = () => pushBytes(0x1B, 0x45, 0x01)
+    const boldOff = () => pushBytes(0x1B, 0x45, 0x00)
+    const normalSize = () => pushBytes(0x1D, 0x21, 0x00)
+    const doubleHeight = () => pushBytes(0x1D, 0x21, 0x01)
+    const smallLineGap = () => {
+      pushBytes(0x1B, 0x33, 0x08)
+      pushText('\n')
+      pushBytes(0x1B, 0x32)
+    }
+    const line = () => pushText(`${'-'.repeat(receiptWidth)}\n`)
+    const cleanText = (value) => String(value ?? '').replace(/\s+/g, ' ').trim()
+    const money = (value) => `Rs ${Number(value || 0).toFixed(2)}`
+    const trimToWidth = (value, width) => {
+      const text = cleanText(value)
+      return text.length > width ? text.slice(0, Math.max(0, width - 1)) : text
+    }
+    const centerText = (value) => {
+      const text = cleanText(value)
+      pushText(`${text}\n`)
+    }
+    const tableLine = () => pushText(`${'-'.repeat(tableWidth)}\n`)
+    const tableText = (value) => {
+      const text = trimToWidth(value, tableWidth)
+      pushText(`${text}${' '.repeat(Math.max(0, tableWidth - text.length))}\n`)
+    }
+    const tableSplitLine = (left, right) => {
+      const rightText = trimToWidth(right, Math.min(12, tableWidth - 2))
+      const leftText = trimToWidth(left, tableWidth - rightText.length - 1)
+      const gap = Math.max(1, tableWidth - leftText.length - rightText.length)
+      pushText(`${leftText}${' '.repeat(gap)}${rightText}\n`)
+    }
+    const wrapText = (value, width = receiptWidth) => {
+      const words = cleanText(value).split(' ').filter(Boolean)
+      const lines = []
+      let current = ''
+
+      words.forEach((word) => {
+        if (!current) {
+          current = word
+          return
+        }
+
+        if ((current.length + 1 + word.length) <= width) {
+          current += ` ${word}`
+        } else {
+          lines.push(current)
+          current = word
+        }
+      })
+
+      if (current) lines.push(current)
+      return lines.length ? lines : ['']
+    }
+
+    pushBytes(0x1B, 0x40)
+    normalSize()
+    alignCenter()
+    const logo = await loadReceiptLogo()
+    if (logo.length) {
+      pushBytes(...logo)
+      pushText('\n')
+    }
+    boldOn()
+    doubleHeight()
+    centerText(restaurantName)
+    normalSize()
+    if (options.isReprint) centerText('REPRINT COPY')
+    boldOff()
+    wrapText(address, receiptWidth).forEach(centerText)
+    centerText(phone)
+    line()
+
+    alignCenter()
+    centerText(`Bill: ${bill.billNumber}  Table: ${bill.tableNumber}`)
+    centerText(`${new Date(bill.completedAt).toLocaleDateString('en-IN')}  ${new Date(bill.completedAt).toLocaleTimeString('en-IN', {
+        hour: '2-digit',
+        minute: '2-digit'
+      })}`)
+    pushText('\n')
+
+    alignCenter()
+    boldOn()
+    centerText('ORDER DETAILS')
+    boldOff()
+    alignCenter()
+    tableLine()
+    boldOn()
+    tableSplitLine('ITEM', 'AMOUNT')
+    boldOff()
+    tableLine()
+
+    bill.orders.forEach(order => {
+      order.items.forEach(item => {
+        const qty = Number(item.quantity || 0)
+        const price = Number(item.price || 0)
+        const amount = qty * price
+
+        boldOn()
+        alignCenter()
+        wrapText(item.name, tableWidth).forEach(tableText)
+        boldOff()
+        tableSplitLine(`${qty} x ${money(price)}`, money(amount))
+        pushText('\n')
+      })
+    })
+
+    tableLine()
+    boldOn()
+    doubleHeight()
+    tableSplitLine('TOTAL', money(totals.subtotal))
+    normalSize()
+    boldOff()
+    smallLineGap()
+
+    alignCenter()
+    centerText('Served with love,')
+    centerText('remembered with taste')
+    boldOn()
+    centerText('Thank you!')
+    boldOff()
+    centerText('We look forward to serving')
+    centerText('you again')
+    centerText('WebReich')
+    pushText('\n')
+    pushBytes(0x1B, 0x64, 0x05)
+    pushBytes(0x1D, 0x56, 0x00)
+
+    return new Uint8Array(bytes)
+  }
+
+  const sendPrinterPayload = async (characteristic, payload) => {
+    const chunkSize = 180
+
+    for (let i = 0; i < payload.length; i += chunkSize) {
+      const slice = payload.slice(i, i + chunkSize)
+      if (characteristic.properties.writeWithoutResponse) {
+        await characteristic.writeValueWithoutResponse(slice)
+      } else {
+        await characteristic.writeValue(slice)
+      }
+    }
+  }
+
 
   const printBillToPrinter = async (characteristic, bill, totals, options = {}) => {
     try {
-      // Create printable HTML element
-      const tempDiv = document.createElement('div')
-      tempDiv.id = 'bill-printable-temp'
-      tempDiv.style.width = '200px'
-      tempDiv.style.padding = '12px'
-      tempDiv.style.background = '#fff'
-      tempDiv.style.fontFamily = 'Arial, sans-serif'
-      tempDiv.style.fontSize = '13px'
-      tempDiv.style.lineHeight = '1.3'
-      tempDiv.style.position = 'absolute'
-      tempDiv.style.left = '-9999px'
-
-      tempDiv.innerHTML = generateBillHTML(bill, totals, options)
-      document.body.appendChild(tempDiv)
-
-      // Import html2canvas dynamically
-      const html2canvas = (await import('html2canvas')).default
-
-      const canvas = await html2canvas(tempDiv, {
-        scale: 2,
-        backgroundColor: '#fff',
-        useCORS: true,
-        width: 230,
-      })
-
-      // Remove temp element
-      document.body.removeChild(tempDiv)
-
-      // Convert to ESC/POS raster
-      const escImage = canvasToEscPosRaster(canvas)
-
-      // Printer commands
-      const init = new Uint8Array([0x1B, 0x40]) // Initialize
-      const alignCenter = new Uint8Array([0x1B, 0x61, 0x01]) // Center alignment
-      const alignLeft = new Uint8Array([0x1B, 0x61, 0x00]) // Left alignment
-      const cutPaper = new Uint8Array([0x0A, 0x0A, 0x1D, 0x56, 0x00]) // Cut paper
-
-      // Combine all commands
-      const payload = new Uint8Array(init.length + alignCenter.length + escImage.length + cutPaper.length)
-      let offset = 0
-      payload.set(init, offset); offset += init.length
-      payload.set(alignCenter, offset); offset += alignCenter.length
-      payload.set(escImage, offset); offset += escImage.length
-      payload.set(cutPaper, offset)
-
-      // Send to printer in chunks
-      for (let i = 0; i < payload.length; i += 180) {
-        const slice = payload.slice(i, i + 180)
-        if (characteristic.properties.writeWithoutResponse) {
-          await characteristic.writeValueWithoutResponse(slice)
-        } else {
-          await characteristic.writeValue(slice)
-        }
-        await new Promise((r) => setTimeout(r, 40))
-      }
-
+      const payload = await buildEscPosBillPayload(bill, totals, options)
+      await sendPrinterPayload(characteristic, payload)
       return true
     } catch (error) {
       console.error('Print error:', error)
@@ -561,9 +698,9 @@ const Billing = () => {
               @media print {
                 body { 
                   font-family: 'Courier New', monospace;
-                  width: 80mm;
+                  width: 90mm;
                   margin: 0;
-                  padding: 10px;
+                  padding: 8px;
                   font-size: 12px;
                 }
                 .header { text-align: center; margin-bottom: 10px; }
