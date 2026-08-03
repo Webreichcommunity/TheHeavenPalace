@@ -78,9 +78,9 @@ const TableManager = ({
         { number: 'T10', displayName: 'T10' },
         { number: 'T11', displayName: 'T11' },
         { number: 'T12', displayName: 'T12' },
-        { number: 'T13', displayName: 'T13' },
         { number: 'T14', displayName: 'T14' },
-        { number: 'T15', displayName: 'T15' }
+        { number: 'T15', displayName: 'T15' },
+        { number: 'T16', displayName: 'T16' }
       ]
     }
   ]
