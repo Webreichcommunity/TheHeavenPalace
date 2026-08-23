@@ -131,12 +131,11 @@ export default function Navbar({ setActiveTab }) {
         <div className="px-4 lg:px-6 h-full flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="block">
-              <img src="/logo.svg" alt="Hevan Cafe" className="w-20 h-20" />
+              <img src="/logo.svg" alt="Hevan Cafe" className="h-10 w-auto" />
             </div>
           </div>
           <div className="text-sm text-gray-500">Loading...</div>
         </div>
-        <div className="pt-16"></div>
       </nav>
     )
   }
@@ -150,7 +149,7 @@ export default function Navbar({ setActiveTab }) {
             {/* Logo */}
             <div className="flex items-center gap-3">
               <div className="block">
-                <img src="/logo.svg" alt="Hevan Cafe" className="w-20 h-20" />
+                <img src="/logo.svg" alt="Hevan Cafe" className="h-10 w-auto" />
               </div>
             </div>
 
@@ -163,7 +162,6 @@ export default function Navbar({ setActiveTab }) {
             </button>
           </div>
         </div>
-        <div className="pt-16"></div>
       </nav>
     )
   }
@@ -188,7 +186,7 @@ export default function Navbar({ setActiveTab }) {
               {/* Logo */}
               <div className="flex items-center gap-3">
                 <div className="block">
-                  <img src="/logo.svg" alt="Hevan Cafe" className="w-20 h-20" />
+                  <img src="/logo.svg" alt="Hevan Cafe" className="h-10 w-auto" />
                 </div>
               </div>
             </div>
@@ -355,10 +353,6 @@ export default function Navbar({ setActiveTab }) {
         </div>
       </div>
 
-      {/* Add padding to content to account for fixed navbar */}
-      <div className="pt-16">
-        {/* Your page content will go here */}
-      </div>
     </>
   )
 }

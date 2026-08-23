@@ -173,6 +173,14 @@ const Dashboard = () => {
         }
       })
       
+      const existingRevenue = dailyRevenue[todayKey] || {}
+      if (
+        existingRevenue.revenue === todayRevenue &&
+        existingRevenue.billsCount === todayBillsCount
+      ) {
+        return
+      }
+
       // Update Firebase with today's revenue
       const revenueRef = ref(database, `dailyRevenue/${todayKey}`)
       update(revenueRef, {

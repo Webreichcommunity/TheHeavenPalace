@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ref, push, update, onValue, off, remove, query, orderByChild } from 'firebase/database'
+import { ref, push, update, onValue, off, remove, query, orderByChild, equalTo } from 'firebase/database'
 import { database } from '../Firebase/config'
 import {
   CheckCircle,
@@ -86,7 +86,7 @@ const Captain = () => {
     setIsInitializing(true)
 
     const tablesRef = ref(database, 'tables')
-    const ordersRef = query(ref(database, 'orders'), orderByChild('status'))
+    const ordersRef = query(ref(database, 'orders'), orderByChild('status'), equalTo('active'))
     const notificationsRef = query(ref(database, 'notifications'), orderByChild('read'))
     const tableGroupsRef = ref(database, 'tableGroups')
 
@@ -322,10 +322,10 @@ const Captain = () => {
       const tableId = order.tableId
 
       // Check if table has any other active orders
-      const hasOtherActiveOrders = Object.values(activeOrders).some(
-        o => o.tableId === tableId && 
-             o.status === 'active' && 
-             o.id !== orderId
+      const hasOtherActiveOrders = Object.entries(activeOrders).some(
+        ([id, order]) => id !== orderId &&
+             order.tableId === tableId &&
+             order.status === 'active'
       )
 
       // If no other active orders and table is not joined, delete table entry
@@ -375,6 +375,7 @@ const Captain = () => {
       if (tableOrders.length === 0) throw new Error('No active orders')
 
       const finalTotal = tableOrders.reduce((sum, [_, order]) => sum + (order.total || 0), 0)
+      const now = new Date().toISOString()
       const finalBill = {
         tableId: selectedTable.id,
         tableNumber: selectedTable.displayName,
@@ -387,28 +388,25 @@ const Captain = () => {
           createdAt: order.createdAt
         })),
         finalTotal,
-        completedAt: new Date().toISOString(),
+        completedAt: now,
         billNumber: Math.floor(10000 + Math.random() * 90000),
-        status: 'paid'
+        status: 'unpaid',
+        paymentStatus: 'unpaid'
       }
 
       const billsRef = ref(database, 'bills')
       const newBillRef = await push(billsRef, finalBill)
       const billId = newBillRef.key
 
-      // Update all orders to closed
-      for (const [orderId] of tableOrders) {
-        const orderRef = ref(database, `orders/${orderId}`)
-        await update(orderRef, {
-          status: 'closed',
-          closedAt: new Date().toISOString(),
-          billId: billId
-        })
-      }
+      const updates = {}
 
-      // Delete table entry since order is completed
-      const tableRef = ref(database, `tables/${selectedTable.id}`)
-      await remove(tableRef)
+      tableOrders.forEach(([orderId]) => {
+        updates[`orders/${orderId}/status`] = 'closed'
+        updates[`orders/${orderId}/closedAt`] = now
+        updates[`orders/${orderId}/billId`] = billId
+      })
+
+      updates[`tables/${selectedTable.id}`] = null
 
       // If table was joined, clean up all joined tables
       if (tables[selectedTable.id]?.isJoined) {
@@ -421,12 +419,14 @@ const Captain = () => {
         for (const groupTableId of groupTables) {
           const hasActiveOrders = getTableActiveOrdersCount(groupTableId) > 0
           if (!hasActiveOrders) {
-            await remove(ref(database, `tables/${groupTableId}`))
+            updates[`tables/${groupTableId}`] = null
           }
         }
 
-        await update(ref(database, `tableGroups/${joinedGroupId}`), null)
+        updates[`tableGroups/${joinedGroupId}`] = null
       }
+
+      await update(ref(database), updates)
 
       setShowBillSentToast(true)
       setShowCompleteOrderModal(false)

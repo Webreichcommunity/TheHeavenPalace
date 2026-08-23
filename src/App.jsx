@@ -25,15 +25,23 @@ function App() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    // Listen for authentication state
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser)
       setLoading(false)
     })
 
-    // Listen for tables data
+    return () => unsubscribe()
+  }, [])
+
+  useEffect(() => {
+    if (!user) {
+      setTables([])
+      setOrders([])
+      return undefined
+    }
+
     const tablesRef = ref(database, 'tables')
-    onValue(tablesRef, (snapshot) => {
+    const unsubscribeTables = onValue(tablesRef, (snapshot) => {
       const data = snapshot.val()
       if (data) {
         const tablesArray = Object.keys(data).map(key => ({
@@ -41,12 +49,13 @@ function App() {
           ...data[key]
         }))
         setTables(tablesArray)
+      } else {
+        setTables([])
       }
     })
 
-    // Listen for orders data
     const ordersRef = ref(database, 'orders')
-    onValue(ordersRef, (snapshot) => {
+    const unsubscribeOrders = onValue(ordersRef, (snapshot) => {
       const data = snapshot.val()
       if (data) {
         const ordersArray = Object.keys(data).map(key => ({
@@ -54,11 +63,16 @@ function App() {
           ...data[key]
         }))
         setOrders(ordersArray)
+      } else {
+        setOrders([])
       }
     })
 
-    return () => unsubscribe()
-  }, [])
+    return () => {
+      unsubscribeTables()
+      unsubscribeOrders()
+    }
+  }, [user])
 
   const handleLogout = async () => {
     try {

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { off, onValue, push, ref, update } from 'firebase/database'
+import { equalTo, off, onValue, orderByChild, push, query, ref, update } from 'firebase/database'
 import { database } from '../Firebase/config'
 import { Bell, CheckCircle, ChefHat, Play, Printer } from 'lucide-react'
 import { printerService } from '../Components/printorder'
@@ -29,7 +29,7 @@ const Kitchen = () => {
   }, [])
 
   useEffect(() => {
-    const ordersRef = ref(database, 'orders')
+    const ordersRef = query(ref(database, 'orders'), orderByChild('status'), equalTo('active'))
 
     onValue(ordersRef, (snapshot) => {
       const data = snapshot.val() || {}
@@ -370,4 +370,3 @@ const Kitchen = () => {
 }
 
 export default Kitchen
-

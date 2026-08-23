@@ -1,8 +1,11 @@
-﻿import React, { useState, useEffect, useRef } from 'react'
+﻿import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { ref, onValue, off, update, remove, query, orderByChild } from 'firebase/database'
+import { ref, onValue, off, update, remove, query, orderByChild, limitToLast } from 'firebase/database'
 import { database } from '../Firebase/config'
-import { ArrowLeft, Printer, CheckCircle, History, Bell, MessageCircle, Download, Filter, Search, X, CreditCard, FileText, Calendar, Clock, Users, IndianRupee, Bluetooth, AlertCircle, ChevronDown } from 'lucide-react'
+import { ArrowLeft, Printer, CheckCircle, History, Search, X, FileText, Calendar, Clock, Users, Bluetooth } from 'lucide-react'
+
+const MAX_LIVE_BILLS = 150
+const MAX_LOCAL_BILL_HISTORY = 300
 
 // Global Bluetooth connection state (same as BluetoothPrinter.jsx)
 let globalBluetoothConnection = {
@@ -20,13 +23,9 @@ const Billing = () => {
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('current')
   const [billHistory, setBillHistory] = useState([])
-  const [showNewBillNotification, setShowNewBillNotification] = useState(false)
-  const [newBillData, setNewBillData] = useState(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [filterTable, setFilterTable] = useState('')
   const [bluetoothConnected, setBluetoothConnected] = useState(globalBluetoothConnection.connected)
-  const [printerDevice, setPrinterDevice] = useState(globalBluetoothConnection.device)
-  const [printerCharacteristic, setPrinterCharacteristic] = useState(globalBluetoothConnection.characteristic)
   const [showPaymentModal, setShowPaymentModal] = useState(false)
   const [paymentMode, setPaymentMode] = useState('')
   const [isProcessingPayment, setIsProcessingPayment] = useState(false)
@@ -40,8 +39,6 @@ const Billing = () => {
   // Initialize Bluetooth connection state from global
   useEffect(() => {
     setBluetoothConnected(globalBluetoothConnection.connected)
-    setPrinterDevice(globalBluetoothConnection.device)
-    setPrinterCharacteristic(globalBluetoothConnection.characteristic)
   }, [])
 
   // Load local bill history on mount
@@ -53,7 +50,7 @@ const Billing = () => {
         const sortedHistory = parsedHistory.sort((a, b) =>
           new Date(b.paidAt || b.completedAt) - new Date(a.paidAt || a.completedAt)
         )
-        setLocalBillHistory(sortedHistory)
+        setLocalBillHistory(sortedHistory.slice(0, MAX_LOCAL_BILL_HISTORY))
       } catch (error) {
         console.error('Error loading local bill history:', error)
       }
@@ -65,30 +62,39 @@ const Billing = () => {
     const billWithPaidInfo = {
       ...bill,
       paymentStatus: 'paid',
-      paidAt: new Date().toISOString(),
+      paidAt: bill.paidAt || new Date().toISOString(),
       paymentMode: paymentMode,
       id: `local_${Date.now()}`
     }
 
-    const updatedHistory = [billWithPaidInfo, ...localBillHistory]
-    setLocalBillHistory(updatedHistory)
+    setLocalBillHistory((history) => {
+      const updatedHistory = [billWithPaidInfo, ...history]
+        .filter((item, index, arr) => arr.findIndex((existing) => existing.billNumber === item.billNumber) === index)
+        .slice(0, MAX_LOCAL_BILL_HISTORY)
 
-    try {
-      localStorage.setItem('paidBillHistory', JSON.stringify(updatedHistory))
-    } catch (error) {
-      console.error('Error saving to localStorage:', error)
-    }
+      try {
+        localStorage.setItem('paidBillHistory', JSON.stringify(updatedHistory))
+      } catch (error) {
+        console.error('Error saving to localStorage:', error)
+      }
+
+      return updatedHistory
+    })
   }
 
   // Fetch bills from Firebase
   useEffect(() => {
     let billId = location.state?.billId
+    let activeBillId = billId || null
     let tablesRef = null
     let billRef = null
     let billsHistoryRef = null
 
     const fetchBillById = (id) => {
       if (!id) return
+      if (billRef && activeBillId === id) return
+      if (billRef) off(billRef)
+      activeBillId = id
       billRef = ref(database, `bills/${id}`)
       onValue(billRef, (snapshot) => {
         const data = snapshot.val()
@@ -106,7 +112,8 @@ const Billing = () => {
     const fetchAllBills = () => {
       billsHistoryRef = query(
         ref(database, 'bills'),
-        orderByChild('completedAt')
+        orderByChild('completedAt'),
+        limitToLast(MAX_LIVE_BILLS)
       )
 
       onValue(billsHistoryRef, (snapshot) => {
@@ -137,7 +144,7 @@ const Billing = () => {
 
     // Otherwise, try to find a table record that has a currentBill and fetch that bill
     tablesRef = ref(database, 'tables')
-    const unsubscribeTables = onValue(tablesRef, (snapshot) => {
+    onValue(tablesRef, (snapshot) => {
       const tables = snapshot.val() || {}
       const candidates = Object.entries(tables)
         .filter(([, t]) => t && t.currentBill && t.currentBill.id)
@@ -187,8 +194,6 @@ const Billing = () => {
         console.log('Bluetooth device disconnected')
         globalBluetoothConnection.connected = false
         setBluetoothConnected(false)
-        setPrinterDevice(null)
-        setPrinterCharacteristic(null)
       })
 
       console.log('Connecting to GATT server...')
@@ -223,8 +228,6 @@ const Billing = () => {
       globalBluetoothConnection.characteristic = foundChar
       globalBluetoothConnection.connected = true
 
-      setPrinterDevice(device)
-      setPrinterCharacteristic(foundChar)
       setBluetoothConnected(true)
       setIsPrinting(false)
 
@@ -260,8 +263,6 @@ const Billing = () => {
     globalBluetoothConnection.connected = false
 
     setBluetoothConnected(false)
-    setPrinterDevice(null)
-    setPrinterCharacteristic(null)
 
     alert('Bluetooth printer disconnected')
   }
@@ -771,15 +772,15 @@ const Billing = () => {
   }
 
   // Helper functions
-  const calculateTotals = (bill, appliedDiscount = discount) => {
+  const calculateTotals = useCallback((bill, appliedDiscount = discount) => {
     if (!bill) return { subtotal: 0, tax: 0, total: 0 }
 
-    const subtotal = bill.finalTotal
+    const subtotal = Number(bill.finalTotal || bill.total || 0)
     const tax = (subtotal * taxRate) / 100
-    const total = subtotal + 0 - appliedDiscount
+    const total = Math.max(0, subtotal + tax - Number(appliedDiscount || 0))
 
     return { subtotal, tax, total, discount: appliedDiscount, taxRate }
-  }
+  }, [discount, taxRate])
 
   const markAsPaid = async (billId) => {
     try {
@@ -842,21 +843,29 @@ const Billing = () => {
     setIsProcessingPayment(true)
 
     try {
+      const paidAt = new Date().toISOString()
+      const paidBill = {
+        ...finalBill,
+        paymentStatus: 'paid',
+        paidAt,
+        paymentMode
+      }
+
       // First, mark as paid
       if (finalBill.id) {
         const billRef = ref(database, `bills/${finalBill.id}`)
         await update(billRef, {
           paymentStatus: 'paid',
-          paidAt: new Date().toISOString(),
-          paymentMode: paymentMode
+          paidAt,
+          paymentMode
         })
       }
 
       // Save to local history with payment mode
-      saveBillToLocalHistory({ ...finalBill, paymentMode })
+      saveBillToLocalHistory(paidBill)
 
       // Print the bill
-      await printBill()
+      await printBill(paidBill)
 
       // Remove from Firebase and table
       if (finalBill.id) {
@@ -909,20 +918,46 @@ const Billing = () => {
     await printBill(bill, { isReprint: true, discount: 0 })
   }
 
-  const filteredBills = (bills) => {
+  const unpaidBills = useMemo(
+    () => billHistory.filter(bill => bill.paymentStatus !== 'paid'),
+    [billHistory]
+  )
+
+  const paidBills = useMemo(
+    () => [...localBillHistory],
+    [localBillHistory]
+  )
+
+  const filterBills = useCallback((bills) => {
+    const search = searchTerm.trim()
     return bills.filter(bill => {
-      const matchesSearch = bill.billNumber?.toString().includes(searchTerm) ||
-        bill.tableNumber?.toString().includes(searchTerm)
+      const matchesSearch = !search ||
+        bill.billNumber?.toString().includes(search) ||
+        bill.tableNumber?.toString().includes(search)
       const matchesTable = !filterTable || bill.tableNumber?.toString() === filterTable
       return matchesSearch && matchesTable
     })
-  }
+  }, [searchTerm, filterTable])
 
-  const unpaidBills = billHistory.filter(bill => bill.paymentStatus !== 'paid')
-  const paidBills = [...localBillHistory]
-  const visibleUnpaidBills = filteredBills(unpaidBills)
-  const visiblePaidBills = filteredBills(paidBills)
-  const totals = finalBill ? calculateTotals(finalBill) : { subtotal: 0, tax: 0, total: 0 }
+  const visibleUnpaidBills = useMemo(
+    () => filterBills(unpaidBills),
+    [filterBills, unpaidBills]
+  )
+
+  const visiblePaidBills = useMemo(
+    () => filterBills(paidBills),
+    [filterBills, paidBills]
+  )
+
+  const tableFilterOptions = useMemo(
+    () => [...new Set([...unpaidBills, ...paidBills].map((bill) => bill.tableNumber).filter(Boolean))],
+    [unpaidBills, paidBills]
+  )
+
+  const totals = useMemo(
+    () => finalBill ? calculateTotals(finalBill) : { subtotal: 0, tax: 0, total: 0 },
+    [calculateTotals, finalBill]
+  )
 
   const groupBillsByDate = (bills) => {
     const grouped = {}
@@ -1077,7 +1112,7 @@ const Billing = () => {
                   className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-red-500"
                 >
                   <option value="">All tables</option>
-                  {[...new Set([...unpaidBills, ...paidBills].map((bill) => bill.tableNumber).filter(Boolean))].map((table) => (
+                  {tableFilterOptions.map((table) => (
                     <option key={table} value={table}>{table}</option>
                   ))}
                 </select>
